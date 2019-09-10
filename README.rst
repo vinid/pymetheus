@@ -16,7 +16,7 @@ Pymetheus
 
 
 
-Logical Reasoning for Deep Nets
+PyMetheus: Deep Nets for Logical Reasoning
 
 
 * Free software: GNU General Public License v3
@@ -26,7 +26,70 @@ Logical Reasoning for Deep Nets
 Features
 --------
 
-* TODO
+* Provides an out of the box tool to learn (fuzz) first order logic with the use of an underlying vector space
+
+
+Features
+--------
+
+* Create a Logic Deep Network
+
+.. code-block:: python
+
+    import pymetheus
+    import itertools
+    from pymetheus.pymetheus import LogicNet
+
+    ll = LogicNet()
+..
+
+* Introduce Some Constants
+
+.. code-block:: python
+
+    ll.constant("Rome")
+    ll.constant("Milan")
+    ll.constant("Italy")
+..
+
+* Introduce Some Predicates and Knowledge
+
+.. code-block:: python
+
+    ll.predicate("capital")
+    ll.predicate("country")
+
+    ll.knowledge("country(Milan,Italy)")
+    ll.knowledge("capital(Rome,Italy)")
+
+    ll.zeroing() # Initialize KB with all knowledge as false
+..
+
+
+* Add quantified rule with data
+.. code-block:: python
+
+    rule = "forall ?a,?b: capital(?a,?b) -> country(?a,?b)"
+    ll.universal_rule(rule)
+
+    constants = ["Milan", "Rome", "Italy"]
+
+    data = []
+    comp = itertools.product(constants, constants)
+
+    for a,b in comp:
+        data.append({"?a" : a, "?b" : b})
+..
+
+* Learn and Reason
+
+.. code-block:: python
+
+    ll.learn(data, epoch=100)
+
+
+    ll.predict("capital(Paris,Italy)")
+..
 
 Credits
 -------
