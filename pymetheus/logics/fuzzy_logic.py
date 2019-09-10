@@ -2,7 +2,7 @@ import torch
 from torch import nn
 import numpy as np
 import torch.nn.functional as F
-from pymetheus.utils.func import *
+from pymetheus.utils.functionalities import *
 
 class UQNetwork(nn.Module):
     def __init__(self, parsed_rule, networks):
