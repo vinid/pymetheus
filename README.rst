@@ -74,9 +74,9 @@ Features
 
     constants = ["Milan", "Rome", "Italy"]
 
-    data = []
     comp = itertools.product(constants, constants)
 
+    data = []
     for a,b in comp:
         data.append({"?a" : a, "?b" : b})
 ..
