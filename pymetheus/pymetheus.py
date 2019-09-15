@@ -172,25 +172,28 @@ class LogicNet:
                 optimizer.step()
                 self.update_constants()
 
-            for a in random.sample(data_vars, sampling_rate):
-                for r_model in self.rules.values():
-                    for i in range(0, 1):
-                        vars = a
+            for r_model in self.rules.values():
+                outputs = torch.tensor(0.0)
+                for vars in random.sample(data_vars, sampling_rate):
 
-                        output = r_model(vars, self.constants)
+                    output = r_model(vars, self.constants)
 
-                        optimizer = torch.optim.RMSprop(r_model.nns.parameters(), lr=learning_rate)
-                        optimizer.zero_grad()
-                        target = torch.from_numpy(np.array([1])).type(torch.FloatTensor)
-                        loss = criterion(output, target)
-                        rule_loss += loss
+                    outputs = outputs + output
 
-                        # apply backpropagation
-                        loss.backward()
-                        optimizer.step()
+                optimizer = torch.optim.RMSprop(r_model.nns.parameters(), lr=learning_rate)
+                optimizer.zero_grad()
 
-                        # print(loss, output, target)
-                        self.update_constants()
+                output = outputs/sampling_rate
+                target = torch.from_numpy(np.array([1])).type(torch.FloatTensor)
+                loss = criterion(output, target)
+                rule_loss += loss
+
+                    # apply backpropagation
+                loss.backward()
+                optimizer.step()
+                self.update_constants()
+                    # print(loss, output, target)
+
 
 
                     #self.update_constants(learning_rate, training_example[0])
