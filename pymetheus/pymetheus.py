@@ -19,7 +19,7 @@ class LogicNet:
         self.axioms = {}
         self.cons = {"&" : T_Norm, "|" : T_CoNorm, "->" : Residual}
 
-    def predicate(self, predicate, arity=2, size = 20, overwrite = False):
+    def predicate(self, predicate, network, arity=2, size = 20, overwrite = False):
         """
         Creates a Neural Network for a string symbol that identifies a predicate
         :param predicate:
@@ -29,6 +29,9 @@ class LogicNet:
 
         if predicate in self.networks.keys() and overwrite == False:
             raise DobuleInitalizationException("Overwrite behaviour is off, error on double declaration of predicate.", predicate)
+
+        if network:
+            self.networks[predicate] = network
 
         self.networks[predicate] = Predicate(size*arity)
         self.axioms[predicate] = [] # initializes list of training samples

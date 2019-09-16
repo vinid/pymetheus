@@ -1,4 +1,5 @@
 import collections
+from itertools import chain, islice
 
 class Node(object):
 
@@ -21,6 +22,12 @@ def explore(node):
         else:
             network_id = node.value[0]
             return network_id
+
+def batching(n, iterable):
+    iterable = iter(iterable)
+    while True:
+        yield chain([next(iterable)], islice(iterable, n-1))
+
 
 def flatten(l):
     for el in l:

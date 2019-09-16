@@ -61,6 +61,7 @@ class UQNetwork(nn.Module):
     def forward(self, vars, constants_object): # {"?a" : a, "?b" : b}
         return self.compute(self.parsed_rule, vars, constants_object)
 
+
 class Predicate(nn.Module):
     def __init__(self, size):
         super(Predicate, self).__init__()
@@ -73,6 +74,7 @@ class Predicate(nn.Module):
         x = self.fc2(x)
         return torch.sigmoid(x)
 
+
 class Negation(nn.Module):
     def __init__(self, predicate):
         super(Negation, self).__init__()
@@ -80,6 +82,7 @@ class Negation(nn.Module):
 
     def forward(self, x):
         return 1 - self.predicate(x)
+
 
 class T_Norm(nn.Module):
     def __init__(self):
@@ -94,6 +97,7 @@ class T_Norm(nn.Module):
 
         return F.relu(val)
 
+
 class T_CoNorm(nn.Module):
     def __init__(self, first, second):
         super(T_CoNorm, self).__init__()
@@ -102,6 +106,7 @@ class T_CoNorm(nn.Module):
 
     def forward(self, x, y):
         return min([1, x + y])
+
 
 class Residual(nn.Module):
     def __init__(self):
