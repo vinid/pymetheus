@@ -8,7 +8,8 @@ import tqdm
 from torch.autograd import Variable
 from pymetheus.logics.fuzzy_logic import *
 from pymetheus.parser import rule_parser as parser
-
+import itertools
+from pymetheus.utils.functionalities import batching
 
 class LogicNet:
     def __init__(self):
@@ -18,8 +19,12 @@ class LogicNet:
         self.rules = {}
         self.axioms = {}
         self.cons = {"&" : T_Norm, "|" : T_CoNorm, "->" : Residual}
+        self.variables = {}
 
-    def predicate(self, predicate, network, arity=2, size = 20, overwrite = False):
+    def variable(self, label, domain):
+        self.variables[label] = list(map(lambda x : self.constants[x], domain))
+
+    def predicate(self, predicate, network=False, arity=2, size = 20, overwrite = False):
         """
         Creates a Neural Network for a string symbol that identifies a predicate
         :param predicate:
@@ -53,7 +58,6 @@ class LogicNet:
         else:
             self.constants[name] = Variable(torch.randn(size), requires_grad=True)
 
-
     def universal_rule(self, rule):
         """
         Adds a universally quantified rule to the KB
@@ -63,7 +67,7 @@ class LogicNet:
         parsed_rule = (parser._parse_formula(rule))
         parsed_rule_axiom = parsed_rule[-1] # remove variables
         tree_rule= rule_to_tree(parsed_rule_axiom)
-        net = UQNetwork(tree_rule, self.networks)
+        net = UQNetworkScalable(tree_rule, self.networks)
         self.rules[rule] = net
 
     def knowledge(self, kb_fact):
@@ -93,6 +97,7 @@ class LogicNet:
         """
         for a in self.constants.keys():
             if hasattr(self.constants[a].grad, 'data'):
+
                 self.constants[a].data.sub_(lr*self.constants[a].grad.data)
                 self.constants[a].grad.zero_()
 
@@ -130,12 +135,11 @@ class LogicNet:
                     loss.backward()
                     optimizer.step()
 
-    def learn(self, data_vars, epoch=100, sampling_rate=30):
+    def learn(self, epoch=100, batch_size=36):
         criterion = nn.BCELoss()
         learning_rate = 0.01
 
         pbar = tqdm.tqdm(total=epoch)
-
 
         for i in range(0, epoch):
             fact_loss = 0
@@ -176,31 +180,33 @@ class LogicNet:
                 self.update_constants()
 
             for r_model in self.rules.values():
-                outputs = torch.tensor(0.0)
-                for vars in random.sample(data_vars, sampling_rate):
+                for x in self.variables.values():
+                    random.shuffle(x)
+                for varz in batching(batch_size, itertools.product(*self.variables.values())):
+                    varz = list(varz)
+                    #print(varz[0])
+                    inputs = dict(zip(self.variables.keys(), varz))
 
-                    output = r_model(vars, self.constants)
+                    output = r_model(inputs)
 
-                    outputs = outputs + output
+                    optimizer = torch.optim.RMSprop(r_model.nns.parameters(), lr=learning_rate)
+                    optimizer.zero_grad()
+                    target = torch.from_numpy(np.array([1])).type(torch.FloatTensor)
+                    loss = criterion(output, target)
 
-                optimizer = torch.optim.RMSprop(r_model.nns.parameters(), lr=learning_rate)
-                optimizer.zero_grad()
-
-                output = outputs/sampling_rate
-                target = torch.from_numpy(np.array([1])).type(torch.FloatTensor)
-                loss = criterion(output, target)
-                rule_loss += loss
+                    rule_loss += loss
 
                     # apply backpropagation
-                loss.backward()
-                optimizer.step()
-                self.update_constants()
+                    loss.backward()
+                    optimizer.step()
+                    self.update_constants()
                     # print(loss, output, target)
 
 
 
                     #self.update_constants(learning_rate, training_example[0])
             pbar.set_description("Current Fact Loss %f and Rule Loss %f" % (fact_loss, rule_loss))
+
             pbar.update(1)
         pbar.close()
 
