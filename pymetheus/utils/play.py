@@ -67,10 +67,10 @@ rule_7 = "forall ?a,?b,?c: (location(?a,?b) & country(?b,?c)) -> location(?a,?c)
 
 
 ll.universal_rule(rule)
-ll.universal_rule(rule_2)
-ll.universal_rule(rule_3)
-ll.universal_rule(rule_4)
-ll.universal_rule(rule_5)
+#ll.universal_rule(rule_2)
+#ll.universal_rule(rule_3)
+#ll.universal_rule(rule_4)
+#ll.universal_rule(rule_5)
 #ll.universal_rule(rule_6)
 #ll.universal_rule(rule_7)
 
