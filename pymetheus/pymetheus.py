@@ -20,11 +20,13 @@ class LogicNet:
         self.axioms = {}
         self.cons = {"&" : T_Norm, "|" : T_CoNorm, "->" : Residual}
         self.variables = {}
+        self.optimizers = {}
 
     def variable(self, label, domain):
         self.variables[label] = list(map(lambda x : self.constants[x], domain))
 
-    def predicate(self, predicate, network=False, arity=2, size = 20, overwrite = False):
+
+    def predicate(self, predicate, network=False, arity=2, size = 10, overwrite = False, learning_rate = 0.001):
         """
         Creates a Neural Network for a string symbol that identifies a predicate
         :param predicate:
@@ -40,8 +42,9 @@ class LogicNet:
 
         self.networks[predicate] = Predicate(size*arity)
         self.axioms[predicate] = [] # initializes list of training samples
+        self.optimizers[predicate] = torch.optim.RMSprop(self.networks[predicate].parameters(), lr=learning_rate)
 
-    def constant(self, name, definition=None, size=20, overwrite=False):
+    def constant(self, name, definition=None, size=10, overwrite=False):
         """
         Creates a (logical) constant in the model. The representation for the constant can be given or learned
         :param name:
@@ -58,7 +61,7 @@ class LogicNet:
         else:
             self.constants[name] = Variable(torch.randn(size), requires_grad=True)
 
-    def universal_rule(self, rule):
+    def universal_rule(self, rule, learning_rate=0.001):
         """
         Adds a universally quantified rule to the KB
         :param rule:
@@ -66,9 +69,13 @@ class LogicNet:
         """
         parsed_rule = (parser._parse_formula(rule))
         parsed_rule_axiom = parsed_rule[-1] # remove variables
+        vars = parsed_rule[1:-1]
+
         tree_rule= rule_to_tree(parsed_rule_axiom)
-        net = UQNetworkScalable(tree_rule, self.networks)
+        net = UQNetworkScalable(tree_rule, self.networks, vars)
         self.rules[rule] = net
+        self.optimizers[rule] = torch.optim.RMSprop(net.parameters(), lr=learning_rate)
+
 
     def knowledge(self, kb_fact):
         """
@@ -143,53 +150,57 @@ class LogicNet:
 
         for i in range(0, epoch):
             fact_loss = 0
-            rule_loss = 0
 
             for axiom in self.axioms:
+                for i in range(0, 5):
+                    model = self.networks[axiom] # get the predicate network
+                    optimizer = self.optimizers[axiom] #torch.optim.RMSprop(model.parameters(), lr=learning_rate)
+                    optimizer.zero_grad()  # apply backpropagation
+                    training_examples = self.axioms[axiom] # get the training samples related to the eaxiom
 
-                model = self.networks[axiom] # get the predicate network
-                optimizer = torch.optim.RMSprop(model.parameters(), lr=learning_rate)
-                optimizer.zero_grad()  # apply backpropagation
-                training_examples = self.axioms[axiom] # get the training samples related to the eaxiom
+                    targets = []
+                    inputs = []
 
-                targets = []
-                inputs = []
+                    if training_examples == []:
+                        continue
 
-                if training_examples == []:
-                    continue
+                    for training_example in training_examples:
+                        arguments_of_predicate = training_example[0]
+                        fuzzy_value_to_predict = training_example[1]
 
-                for training_example in training_examples:
-                    arguments_of_predicate = training_example[0]
-                    fuzzy_value_to_predict = training_example[1]
+                        input_to_model = self.aggregate_constants(arguments_of_predicate)
+                        target = torch.from_numpy(np.array([fuzzy_value_to_predict])).type(torch.FloatTensor)
+                        targets.append(target)
+                        inputs.append(input_to_model)
 
-                    input_to_model = self.aggregate_constants(arguments_of_predicate)
-                    target = torch.from_numpy(np.array([fuzzy_value_to_predict])).type(torch.FloatTensor)
-                    targets.append(target)
-                    inputs.append(input_to_model)
+                    inputs = torch.stack(inputs)
+                    targets = torch.stack(targets)
 
-                inputs = torch.stack(inputs)
-                targets = torch.stack(targets)
+                    outputs = model(inputs)
 
-                outputs = model(inputs)
+                    loss = criterion(outputs, targets) # compute loss
+                    fact_loss += loss
 
-                loss = criterion(outputs, targets) # compute loss
-                fact_loss += loss
-
-                loss.backward()
-                optimizer.step()
-                self.update_constants()
-
-            for r_model in self.rules.values():
+                    loss.backward()
+                    optimizer.step()
+                    self.update_constants()
+            specific_losses = []
+            for rule, r_model in self.rules.items():
                 for x in self.variables.values():
                     random.shuffle(x)
-                for varz in batching(batch_size, itertools.product(*self.variables.values())):
+                rule_loss = 0
+
+                #temp = self.variables.values()
+                temp = {k : v for k,v in filter(lambda t: t[0] in r_model.vars, self.variables.items())}
+
+                for varz in batching(batch_size, itertools.product(*temp.values())):
                     varz = list(varz)
-                    #print(varz[0])
-                    inputs = dict(zip(self.variables.keys(), varz))
+
+                    inputs = dict(zip(r_model.vars, varz))
 
                     output = r_model(inputs)
 
-                    optimizer = torch.optim.RMSprop(r_model.nns.parameters(), lr=learning_rate)
+                    optimizer = self.optimizers[rule] #torch.optim.RMSprop(r_model.nns.parameters(), lr=learning_rate)
                     optimizer.zero_grad()
                     target = torch.from_numpy(np.array([1])).type(torch.FloatTensor)
                     loss = criterion(output, target)
@@ -201,23 +212,24 @@ class LogicNet:
                     optimizer.step()
                     self.update_constants()
                     # print(loss, output, target)
-
+                specific_losses.append(rule_loss)
 
 
                     #self.update_constants(learning_rate, training_example[0])
-            pbar.set_description("Current Fact Loss %f and Rule Loss %f" % (fact_loss, rule_loss))
+            pbar.set_description("Current Fact Loss %f and Rule Loss %s" % (fact_loss, " ".join(map(lambda x: str(x.item())[0:5], specific_losses))))
 
             pbar.update(1)
         pbar.close()
 
-    def reason(self, formula):
+    def reason(self, formula, verbose=True):
         with torch.no_grad():
             parsed_formula = parser._parse_formula(formula)
             model = self.networks[parsed_formula[0]]
             data = parsed_formula[1]
             inputs = self.aggregate_constants(data)
-
-            return model(inputs).numpy()[0]
+            if verbose:
+                print(formula + ": ", end="")
+                return model(inputs).numpy()[0]
 
     def _variable_label(self, label):
         try:

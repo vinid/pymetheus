@@ -26,7 +26,10 @@ def explore(node):
 def batching(n, iterable):
     iterable = iter(iterable)
     while True:
-        yield chain([next(iterable)], islice(iterable, n-1))
+        try:
+            yield chain([next(iterable)], islice(iterable, n-1))
+        except StopIteration:
+            return
 
 
 def flatten(l):
