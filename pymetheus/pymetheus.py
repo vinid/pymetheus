@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 """Main module."""
-
+from decimal import Decimal
 from pymetheus.utils.exceptions import DobuleInitalizationException
 import random
 import tqdm
@@ -26,7 +26,7 @@ class LogicNet:
         self.variables[label] = list(map(lambda x : self.constants[x], domain))
 
 
-    def predicate(self, predicate, network=False, arity=2, size = 10, overwrite = False, learning_rate = 0.001):
+    def predicate(self, predicate, network=False, arity=2, size = 20, overwrite = False, learning_rate = 0.001):
         """
         Creates a Neural Network for a string symbol that identifies a predicate
         :param predicate:
@@ -42,9 +42,10 @@ class LogicNet:
 
         self.networks[predicate] = Predicate(size*arity)
         self.axioms[predicate] = [] # initializes list of training samples
+        self.axioms["~" + predicate] = [] # initializes list of training samples
         self.optimizers[predicate] = torch.optim.RMSprop(self.networks[predicate].parameters(), lr=learning_rate)
 
-    def constant(self, name, definition=None, size=10, overwrite=False):
+    def constant(self, name, definition=None, size=20, overwrite=False):
         """
         Creates a (logical) constant in the model. The representation for the constant can be given or learned
         :param name:
@@ -90,7 +91,7 @@ class LogicNet:
 
         if parsed_formula[0] == "~":
             predicate = parsed_formula[1][0]
-            self.axioms[predicate].append((parsed_formula[1][1], 0))
+            self.axioms["~" + predicate].append((parsed_formula[1][1], 1))
         else:
             predicate = parsed_formula[0]
             self.axioms[predicate].append((parsed_formula[1], 1))
@@ -143,19 +144,35 @@ class LogicNet:
                     optimizer.step()
 
     def learn(self, epoch=100, batch_size=36):
-        criterion = nn.BCELoss()
+
         learning_rate = 0.01
+
+        parameters = []
+
+        for neural in self.axioms:
+            if neural[0] == "~":
+                continue
+            parameters = parameters + list(self.networks[neural].parameters())
+
+        #for rule, neural in self.rules.items():
+            #parameters = parameters + list(neural.parameters())
+
+        mega_optimizers = torch.optim.Adam(parameters, lr=learning_rate)
 
         pbar = tqdm.tqdm(total=epoch)
 
-        for i in range(0, epoch):
-            fact_loss = 0
+        for iter in range(0, epoch):
 
+            current_training_satisfaction = []
+            collect_outputs = []
             for axiom in self.axioms:
-                for i in range(0, 5):
-                    model = self.networks[axiom] # get the predicate network
-                    optimizer = self.optimizers[axiom] #torch.optim.RMSprop(model.parameters(), lr=learning_rate)
-                    optimizer.zero_grad()  # apply backpropagation
+                for i in range(0, 1):
+
+                    if axiom[0] == "~":
+                        model = Negation(self.networks[axiom[1:]]) # get the predicate network
+                    else:
+                        model = self.networks[axiom]  # get the predicate network
+
                     training_examples = self.axioms[axiom] # get the training samples related to the eaxiom
 
                     targets = []
@@ -174,51 +191,45 @@ class LogicNet:
                         inputs.append(input_to_model)
 
                     inputs = torch.stack(inputs)
-                    targets = torch.stack(targets)
 
                     outputs = model(inputs)
+                    collect_outputs.append(torch.mean(outputs))
 
-                    loss = criterion(outputs, targets) # compute loss
-                    fact_loss += loss
-
-                    loss.backward()
-                    optimizer.step()
-                    self.update_constants()
-            specific_losses = []
             for rule, r_model in self.rules.items():
                 for x in self.variables.values():
                     random.shuffle(x)
-                rule_loss = 0
 
-                #temp = self.variables.values()
-                temp = {k : v for k,v in filter(lambda t: t[0] in r_model.vars, self.variables.items())}
-
+                temp = {k: v for k, v in filter(lambda t: t[0] in r_model.vars, self.variables.items())}
+                rule_accumulator = []
                 for varz in batching(batch_size, itertools.product(*temp.values())):
                     varz = list(varz)
 
-                    inputs = dict(zip(r_model.vars, varz))
+                    inputs = {}
+                    for index, var in enumerate(r_model.vars):
+                        inputs[var] = list(map(lambda x : x[index], varz))
 
                     output = r_model(inputs)
 
-                    optimizer = self.optimizers[rule] #torch.optim.RMSprop(r_model.nns.parameters(), lr=learning_rate)
-                    optimizer.zero_grad()
-                    target = torch.from_numpy(np.array([1])).type(torch.FloatTensor)
-                    loss = criterion(output, target)
+                    rule_accumulator.append(output)
+                output = torch.min(torch.stack(rule_accumulator))
 
-                    rule_loss += loss
+                collect_outputs.append(output)
 
-                    # apply backpropagation
-                    loss.backward()
-                    optimizer.step()
-                    self.update_constants()
-                    # print(loss, output, target)
-                specific_losses.append(rule_loss)
+            mega_optimizers.zero_grad()
+            #
+            mean_value = torch.mean(torch.stack(collect_outputs))
+            current_training_satisfaction.append(mean_value.item())
+            #
+            output = -1*mean_value
+            output.backward()
+            mega_optimizers.step()
+            self.update_constants()
 
-
-                    #self.update_constants(learning_rate, training_example[0])
-            pbar.set_description("Current Fact Loss %f and Rule Loss %s" % (fact_loss, " ".join(map(lambda x: str(x.item())[0:5], specific_losses))))
+            pbar.set_description("Current Satisfiability %f)" % (mean_value))
 
             pbar.update(1)
+
+
         pbar.close()
 
     def reason(self, formula, verbose=True):

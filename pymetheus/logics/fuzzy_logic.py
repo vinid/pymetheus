@@ -118,6 +118,7 @@ class UQNetworkScalable(nn.Module):
 
                 val = self.nns[network_id](stacked)
 
+
                 if father:
                     return torch.min(baseline - val)
                 else:
@@ -152,8 +153,8 @@ class UQNetworkScalable(nn.Module):
 class Predicate(nn.Module):
     def __init__(self, size):
         super(Predicate, self).__init__()
-        self.fc = nn.Linear(size, 20)
-        self.fc2 = nn.Linear(20, 1)
+        self.fc = nn.Linear(size, 10)
+        self.fc2 = nn.Linear(10, 1)
 
     def forward(self, input):
         x = self.fc(input)
