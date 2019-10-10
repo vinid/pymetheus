@@ -4,84 +4,33 @@ import numpy as np
 import torch.nn.functional as F
 from pymetheus.utils.functionalities import *
 
-# class UQNetwork(nn.Module):
-#     def __init__(self, parsed_rule, networks, vars):
-#         super(UQNetwork, self).__init__()
-#         self.parsed_rule = parsed_rule
-#         self.vars = vars
-#         explored = explore(parsed_rule)
-#
-#         if type(explored) == str:
-#             to_module_dict = [[explored, networks[explored]]]
-#         else:
-#             nets_name = (list(flatten(explored)))
-#             to_module_dict = list(map(lambda x: [x, networks[x]], nets_name))
-#
-#
-#         self.nns = nn.ModuleDict(to_module_dict)
-#
-#     def aggregate_constants(self, constants, constants_object):
-#         """
-#         Constants' vectors are concatenated and then given in input to the respective network
-#         :param constants:
-#         :return:
-#         """
-#         inputs = []
-#         for a in constants:
-#             inputs.append(constants_object[a])
-#         return torch.cat(inputs)
-#
-#     def compute(self, parsed, vars, constants_object):
-#         if parsed.value in ["->", "&"]:
-#             left = self.compute(parsed.left, vars, constants_object)
-#             right = self.compute(parsed.right, vars, constants_object)
-#             return self.nns[parsed.value](left, right)
-#
-#         elif parsed.left == None and parsed.right == None:  # leaf
-#             if parsed.value[0] == "~":
-#
-#                 network_id = parsed.value[1][0]
-#                 network_vars = parsed.value[1][1]
-#
-#                 network_vars = list(map(lambda x: vars[x], network_vars))
-#                 baseline = torch.from_numpy(np.array([1])).type(torch.FloatTensor)
-#                 net_fusion = self.aggregate_constants(network_vars, constants_object)
-#
-#                 val = self.nns[network_id](net_fusion)
-#
-#                 return baseline - val
-#             else:
-#                 network_id = parsed.value[0]
-#                 network_vars = parsed.value[1]
-#                 network_vars = list(map(lambda x : vars[x], network_vars))
-#
-#                 net_fusion = self.aggregate_constants(network_vars, constants_object)
-#
-#                 return self.nns[network_id](net_fusion)
-#
-#     def forward(self, vars, constants_object): # {"?a" : a, "?b" : b}
-#         return self.compute(self.parsed_rule, vars, constants_object)
 
 class UQNetworkScalable(nn.Module):
-    def __init__(self, parsed_rule, networks, vars):
+    """
+    Implements a universal quantified formula that supports batching
+    """
+    def __init__(self, parsed_rule, networks, variables, aggregation=lambda x: torch.mean()):
         super(UQNetworkScalable, self).__init__()
-        self.parsed_rule = parsed_rule
-        self.vars = vars
-        explored = explore(parsed_rule)
+        self.parsed_rule = parsed_rule  # the rule
+        self.vars = variables  # vars of the rule (?a, ?b)
+        self.aggregator = aggregation  # (lambda x : torch.mean())
 
+        explored = get_networks_ids(parsed_rule)  # explore the rule to get network ids (e.g., "country")
+
+        # if it is a simple one predicate only axiom (e.g., forall x: smokes(x)) the method returns a string
         if type(explored) == str:
             to_module_dict = [[explored, networks[explored]]]
-        else:
+        else:  # otherwise it's a list
             nets_name = (list(flatten(explored)))
             to_module_dict = list(map(lambda x: [x, networks[x]], nets_name))
-
 
         self.nns = nn.ModuleDict(to_module_dict)
 
     def aggregate_constants(self, constants, constants_object):
         """
         Constants' vectors are concatenated and then given in input to the respective network
-        :param constants:
+        :param constants: constants to concat together
+        :param constants_object dict with vectors
         :return:
         """
         inputs = []
@@ -89,77 +38,79 @@ class UQNetworkScalable(nn.Module):
             inputs.append(constants_object[a])
         return torch.cat(inputs)
 
-    def compute(self, parsed, vars, father=True):
+    def compute(self, parsed, vars):
 
         if parsed.value in ["->", "&"]:
-            left = self.compute(parsed.left, vars, father=False)
-            right = self.compute(parsed.right, vars, father=False)
+            left = self.compute(parsed.left, vars)
+            right = self.compute(parsed.right, vars)
             before = self.nns[parsed.value](left, right)
-            operation = torch.min(before)
-            #print(operation, before)
+            operation = self.aggregator(before)
 
             return operation
 
-        elif parsed.left == None and parsed.right == None:  # leaf
+        elif parsed.left is None and parsed.right is None:  # leaf
             if parsed.value[0] == "~":
-
                 network_id = parsed.value[1][0]
                 network_vars = parsed.value[1][1]
 
-                new_mixer = []
+                filter_vars = []
                 for a in network_vars:
-                    new_mixer.append(vars[a])
+                    filter_vars.append(vars[a])
 
-                inputs = list(map(list, zip(*new_mixer)))
-                catted = list(map(torch.cat, inputs))
-                stacked = torch.stack(catted)
+                inputs = map(list, zip(*filter_vars))
+                concatenate_inputs = list(map(torch.cat, inputs))
 
-                baseline = torch.from_numpy(np.array([1])).type(torch.FloatTensor)
+                stack_inputs_for_network = torch.stack(concatenate_inputs)
 
-                val = self.nns[network_id](stacked)
+                val = self.nns[network_id](stack_inputs_for_network)
 
-
-                if father:
-                    return torch.min(baseline - val)
-                else:
-                    return baseline - val
+                return 1 - val
             else:
                 network_id = parsed.value[0]
                 network_vars = parsed.value[1]
-                new_mixer = []
 
+                filter_vars = []
                 for a in network_vars:
-                    new_mixer.append(vars[a])
+                    filter_vars.append(vars[a])
 
-                inputs = list(map(list, zip(*new_mixer)))
-                catted = list(map(torch.cat, inputs))
-                stacked = torch.stack(catted)
-                # network_vars = list(map(lambda x: vars[x], network_vars))
-                # net_fusion = self.aggregate_constants(network_vars)
+                inputs = map(list, zip(*filter_vars))
+                concatenate_inputs = list(map(torch.cat, inputs))
 
-                if father:
-                    return torch.min(self.nns[network_id](stacked))
-                else:
-                    return self.nns[network_id](stacked)
+                stack_inputs_for_network = torch.stack(concatenate_inputs)
+
+                val = self.nns[network_id](stack_inputs_for_network)
+
+                return val
+
+    def forward(self, variables): # {"?a" : a, "?b" : b}
+        return self.compute(self.parsed_rule, variables)
 
 
-    def forward(self, vars): # {"?a" : a, "?b" : b}
+class Function(nn.Module):
+    def __init__(self, size):
+        super(Function, self).__init__()
 
-        #vars = {"a" : [vectors], "b" : [vectors], "c" : [vectors] }
+        self.linear = nn.Linear(size, size)
 
-        return self.compute(self.parsed_rule, vars)
+    def forward(self, x):
+        return self.linear(x)
 
 
 class Predicate(nn.Module):
     def __init__(self, size):
         super(Predicate, self).__init__()
-        self.fc = nn.Linear(size, 10)
-        self.fc2 = nn.Linear(10, 1)
+        k = 20
 
-    def forward(self, input):
-        x = self.fc(input)
-        x = nn.functional.relu(x)
-        x = self.fc2(x)
+        self.W = nn.Bilinear(size, size, k)
+        self.V = nn.Linear(size, k)
+        self.u = nn.Linear(k, 1)
+
+    def forward(self, x):
+        first = self.W(x, x)
+        second = self.V(x)
+        output = torch.tanh(first+second)
+        x = self.u(output)
+
         return torch.sigmoid(x)
 
 
@@ -177,13 +128,9 @@ class T_Norm(nn.Module):
         super(T_Norm, self).__init__()
 
     def forward(self, x, y):
-        #print(x + y - 1)
-
         val = x + y - 1
-        #print("a", val, max([0, val]))
-        #res = max([0.0001, val])
 
-        return F.relu(val)
+        return nn.functional.relu(val)
 
 
 class T_CoNorm(nn.Module):
@@ -203,12 +150,4 @@ class Residual(nn.Module):
     def forward(self, x, y):
         baseline = torch.from_numpy(np.array([1])).type(torch.FloatTensor)
 
-        operation = baseline - x + y
-        return torch.max(1 - x, y)
-
-        #return y/x
-
-
-        #return torch.min(operation, baseline)
-        #return 1 - x + x*y
-
+        return torch.min(baseline, 1 - x + y)

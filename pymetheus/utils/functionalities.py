@@ -1,6 +1,10 @@
 import collections
 from itertools import chain, islice
 
+def harmonic_mean(input):
+    return input.pow(-1).mean().pow(-1)
+
+
 class Node(object):
 
     def __init__(self, value, left=None, right=None):
@@ -8,20 +12,27 @@ class Node(object):
         self.left = left    # Left child
         self.right = right  # Right child
 
-def explore(node):
-    listi = []
+
+def get_networks_ids(node):
+    """
+    Gets network ids, might return list in case of multiple predicates or string
+    :param node:
+    :return:
+    """
+    accumulator = []
     if node.value in ["->", "&", "|"]:
-        listi.append(explore(node.left))
-        listi.append(explore(node.right))
-        listi.append(node.value)
-        return listi
-    elif node.left == None and node.right == None:  # leaf
+        accumulator.append(get_networks_ids(node.left))
+        accumulator.append(get_networks_ids(node.right))
+        accumulator.append(node.value)
+        return accumulator
+    elif node.left is None and node.right is None:  # leaf
         if node.value[0] == "~":
             network_id = node.value[1][0]
             return network_id
         else:
             network_id = node.value[0]
             return network_id
+
 
 def batching(n, iterable):
     iterable = iter(iterable)

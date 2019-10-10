@@ -11,8 +11,10 @@ from pymetheus.parser import rule_parser as parser
 import itertools
 from pymetheus.utils.functionalities import batching
 
+
 class LogicNet:
-    def __init__(self):
+    def __init__(self, final_aggregator = (lambda x : torch.mean(x)),
+                 universal_aggregator = (lambda x : 1/torch.mean(1/(x+1e-10)))): # ()
 
         self.constants = {}
         self.networks = {"->" : Residual(), "&" : T_Norm()}
@@ -20,13 +22,14 @@ class LogicNet:
         self.axioms = {}
         self.cons = {"&" : T_Norm, "|" : T_CoNorm, "->" : Residual}
         self.variables = {}
-        self.optimizers = {}
+        self.final_aggregator = final_aggregator
+        self.universal_aggregator = universal_aggregator
 
     def variable(self, label, domain):
         self.variables[label] = list(map(lambda x : self.constants[x], domain))
 
 
-    def predicate(self, predicate, network=False, arity=2, size = 20, overwrite = False, learning_rate = 0.001):
+    def predicate(self, predicate, network=False, arity=2, size = 10, overwrite = False):
         """
         Creates a Neural Network for a string symbol that identifies a predicate
         :param predicate:
@@ -41,11 +44,11 @@ class LogicNet:
             self.networks[predicate] = network
 
         self.networks[predicate] = Predicate(size*arity)
+        #self.networks["~" + predicate] = Negation(self.networks[predicate])
         self.axioms[predicate] = [] # initializes list of training samples
-        self.axioms["~" + predicate] = [] # initializes list of training samples
-        self.optimizers[predicate] = torch.optim.RMSprop(self.networks[predicate].parameters(), lr=learning_rate)
+        #self.axioms["~" + predicate] = [] # initializes list of training samples
 
-    def constant(self, name, definition=None, size=20, overwrite=False):
+    def constant(self, name, definition=None, size=10, overwrite=False):
         """
         Creates a (logical) constant in the model. The representation for the constant can be given or learned
         :param name:
@@ -62,21 +65,19 @@ class LogicNet:
         else:
             self.constants[name] = Variable(torch.randn(size), requires_grad=True)
 
-    def universal_rule(self, rule, learning_rate=0.001):
+    def universal_rule(self, rule):
         """
         Adds a universally quantified rule to the KB
         :param rule:
         :return:
         """
         parsed_rule = (parser._parse_formula(rule))
-        parsed_rule_axiom = parsed_rule[-1] # remove variables
-        vars = parsed_rule[1:-1]
+        parsed_rule_axiom = parsed_rule[-1]  # remove variables
+        vars = parsed_rule[1:-1]  # get variables
 
-        tree_rule= rule_to_tree(parsed_rule_axiom)
-        net = UQNetworkScalable(tree_rule, self.networks, vars)
+        tree_rule = rule_to_tree(parsed_rule_axiom)
+        net = UQNetworkScalable(tree_rule, self.networks, vars, self.universal_aggregator)
         self.rules[rule] = net
-        self.optimizers[rule] = torch.optim.RMSprop(net.parameters(), lr=learning_rate)
-
 
     def knowledge(self, kb_fact):
         """
@@ -84,19 +85,16 @@ class LogicNet:
         :param axiom:
         :return:
         """
-
-        #TODO: make sure constants were initialized before this step
-
         parsed_formula = parser._parse_formula(kb_fact)
 
-        if parsed_formula[0] == "~":
+        if parsed_formula[0] == "~":  # negative axiom
             predicate = parsed_formula[1][0]
-            self.axioms["~" + predicate].append((parsed_formula[1][1], 1))
+            self.axioms[predicate].append((parsed_formula[1][1], 0))
         else:
             predicate = parsed_formula[0]
             self.axioms[predicate].append((parsed_formula[1], 1))
 
-    def update_constants(self, lr=0.01):
+    def update_constants(self, lr=0.1):
         """
         Manual backpropagation of all the vectors
         :param lr:
@@ -115,124 +113,118 @@ class LogicNet:
         :param constants:
         :return:
         """
+
         inputs = []
         for a in constants:
             inputs.append(self.constants[a])
         return torch.cat(inputs)
 
-    def zeroing(self):
-        criterion = nn.BCELoss()
-        learning_rate = 0.001
-        for i in range(0, 50):
-            for axiom in self.axioms:
-                model = self.networks[axiom]  # get the predicate network
-                optimizer = torch.optim.RMSprop(model.parameters(), lr=learning_rate)
-                training_examples = self.axioms[axiom]  # get the training samples related to the eaxiom
 
-                for training_example in training_examples:
-                    arguments_of_predicate = training_example[0]
-                    fuzzy_value_to_predict = 0
+    def training_axiom(self, axiom):
+        model = self.networks[axiom]  # get the predicate network
 
-                    input_to_model = self.aggregate_constants(arguments_of_predicate)
+        training_examples = self.axioms[axiom]  # get the training samples related to the eaxiom
 
-                    output = model(input_to_model)
-                    target = torch.from_numpy(np.array([fuzzy_value_to_predict])).type(torch.FloatTensor)
-                    loss = criterion(output, target)  # compute loss
+        targets = []
+        inputs = []
 
-                    optimizer.zero_grad()  # apply backpropagation
-                    loss.backward()
-                    optimizer.step()
+        for training_example in training_examples:
 
-    def learn(self, epoch=100, batch_size=36):
+            arguments_of_predicate = training_example[0]
+            fuzzy_value_to_predict = training_example[1]
+            input_to_model = self.aggregate_constants(arguments_of_predicate)
 
-        learning_rate = 0.01
+            target = torch.from_numpy(np.array([fuzzy_value_to_predict])).type(torch.FloatTensor)
+            targets.append(target)
+            inputs.append(input_to_model)
 
-        parameters = []
+        inputs = torch.stack(inputs)
+        targets = torch.stack(targets)
+
+        outputs = torch.abs(model(inputs) - targets)
+        return outputs
+
+    def training_rule(self, rule, r_model, batch_size):
+        rule_accumulator = []
+        temp = {k: v for k, v in filter(lambda t: t[0] in r_model.vars, self.variables.items())}
+        prepare_iterator = (itertools.product(*temp.values()))
+        for var_inputs in batching(batch_size, prepare_iterator):
+            variables = list(var_inputs)
+            inputs = {}
+            for index, var in enumerate(r_model.vars):
+                inputs[var] = list(map(lambda x: x[index], variables))
+            output = r_model(inputs)
+
+            rule_accumulator.append(output.reshape(-1))
+        return 1 - self.universal_aggregator(torch.cat(rule_accumulator))
+
+    def define_optimizer(self, learning_rate):
+        parameters = set()
 
         for neural in self.axioms:
-            if neural[0] == "~":
-                continue
-            parameters = parameters + list(self.networks[neural].parameters())
+            parameters |= set(self.networks[neural].parameters())
+        for const in self.constants:
+            parameters |= set([self.constants[const]])
 
-        #for rule, neural in self.rules.items():
-            #parameters = parameters + list(neural.parameters())
+        return torch.optim.Adam(parameters, lr=learning_rate)
 
-        mega_optimizers = torch.optim.Adam(parameters, lr=learning_rate)
+    def learn(self, epochs=100, batch_size=36):
 
-        pbar = tqdm.tqdm(total=epoch)
+        learning_rate = 0.1
+        optimizer = self.define_optimizer(learning_rate)
+        pbar = tqdm.tqdm(total=epochs)
 
-        for iter in range(0, epoch):
+        for epoch in range(0, epochs):
+            optimizer.zero_grad()
+            optimize_net_values = []
+            accumulate = []
 
-            current_training_satisfaction = []
-            collect_outputs = []
-            for axiom in self.axioms:
-                for i in range(0, 1):
+            axioms = list(self.axioms.keys())
+            for i in range(0, 2):
+                for axiom in axioms:
+                    training_examples = self.axioms[axiom]  # get the training samples related to the axiom
 
-                    if axiom[0] == "~":
-                        model = Negation(self.networks[axiom[1:]]) # get the predicate network
-                    else:
-                        model = self.networks[axiom]  # get the predicate network
-
-                    training_examples = self.axioms[axiom] # get the training samples related to the eaxiom
-
-                    targets = []
-                    inputs = []
-
-                    if training_examples == []:
+                    if not training_examples:
                         continue
 
-                    for training_example in training_examples:
-                        arguments_of_predicate = training_example[0]
-                        fuzzy_value_to_predict = training_example[1]
+                    outputs = self.training_axiom(axiom)
+                    mean_value = torch.mean(outputs)
 
-                        input_to_model = self.aggregate_constants(arguments_of_predicate)
-                        target = torch.from_numpy(np.array([fuzzy_value_to_predict])).type(torch.FloatTensor)
-                        targets.append(target)
-                        inputs.append(input_to_model)
+                    optimize_net_values.append(mean_value.reshape(-1))
 
-                    inputs = torch.stack(inputs)
+                    #output = torch.mean(torch.stack(optimize_net_values))
+                    #print(axiom, 1 - mean_value)
+                    accumulate.append(mean_value.item())
+                    #output.backward(retain_graph=True)
+                    #optimizer.step()
 
-                    outputs = model(inputs)
-                    collect_outputs.append(torch.mean(outputs))
+                    #optimize_net_values = []
+                    #optimizer.zero_grad()
 
             for rule, r_model in self.rules.items():
-                for x in self.variables.values():
-                    random.shuffle(x)
+                output = self.training_rule(rule, r_model, batch_size)
+                optimize_net_values.append(output.reshape(-1))
+                #print(rule, 1 - output)
 
-                temp = {k: v for k, v in filter(lambda t: t[0] in r_model.vars, self.variables.items())}
-                rule_accumulator = []
-                for varz in batching(batch_size, itertools.product(*temp.values())):
-                    varz = list(varz)
+                accumulate.append(output.item())
 
-                    inputs = {}
-                    for index, var in enumerate(r_model.vars):
-                        inputs[var] = list(map(lambda x : x[index], varz))
+            output = torch.mean(torch.stack(optimize_net_values))
+            output.backward(retain_graph=True)
+            optimizer.step()
 
-                    output = r_model(inputs)
 
-                    rule_accumulator.append(output)
-                output = torch.min(torch.stack(rule_accumulator))
+            with torch.no_grad():
+                current_sat = 1 - np.mean(accumulate)
 
-                collect_outputs.append(output)
+            if current_sat > 0.999:
+                break
 
-            mega_optimizers.zero_grad()
-            #
-            mean_value = torch.mean(torch.stack(collect_outputs))
-            current_training_satisfaction.append(mean_value.item())
-            #
-            output = -1*mean_value
-            output.backward()
-            mega_optimizers.step()
-            self.update_constants()
-
-            pbar.set_description("Current Satisfiability %f)" % (mean_value))
+            pbar.set_description("Current Satisfiability %f)" % (current_sat))
 
             pbar.update(1)
 
 
-        pbar.close()
-
-    def reason(self, formula, verbose=True):
+    def reason(self, formula, verbose=False):
         with torch.no_grad():
             parsed_formula = parser._parse_formula(formula)
             model = self.networks[parsed_formula[0]]
@@ -240,44 +232,5 @@ class LogicNet:
             inputs = self.aggregate_constants(data)
             if verbose:
                 print(formula + ": ", end="")
-                return model(inputs).numpy()[0]
+            return model(inputs).numpy()[0]
 
-    def _variable_label(self, label):
-        try:
-            if label.startswith("?") and len(label) > 1:
-                return "?" + label[1:]
-        except:
-            pass
-        return label
-
-    variables = []
-
-    def build_formula(self, data):
-
-        formulas = []
-        operator = None
-        if str(data[0]) in self.axioms:
-            return [data[0], data[1]]
-        elif str(data[0]) == "forall":
-            variables = []
-            for t in data[1:-1]:
-                variables.append(self._variable_label(t))
-            variables = tuple(variables)
-            return "forall", variables, self.build_formula(data[-1])
-        else:
-            for c in data:
-                if str(c) in self.cons:
-                    assert (operator is None or c == operator)
-                    operator = c
-                else:
-                    formulas.append(c)
-            fromulaz = []
-
-            for a in formulas:
-
-                fromulaz.append(self.build_formula(a))
-
-            formulas = fromulaz# [self.build_formula(f) for f in formulas]
-
-
-            return [self.cons[operator], *formulas]
