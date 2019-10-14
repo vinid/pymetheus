@@ -24,7 +24,7 @@ smokes = ['a','e','f','g','j','n']
 
 cancer = ['a','e']
 [ll.knowledge("Cancer(%s)" % x) for x in cancer]
-#[ll.knowledge("~Cancer(%s)" % x) for x in g1 if x not in cancer]
+[ll.knowledge("~Cancer(%s)" % x) for x in g1 if x not in cancer]
 
 
 

@@ -1,9 +1,6 @@
 # -*- coding: utf-8 -*-
-
 """Main module."""
-from decimal import Decimal
 from pymetheus.utils.exceptions import DobuleInitalizationException
-import random
 import tqdm
 from torch.autograd import Variable
 from pymetheus.logics.fuzzy_logic import *
@@ -17,7 +14,7 @@ class LogicNet:
                  universal_aggregator = (lambda x : 1/torch.mean(1/(x+1e-10)))): # ()
 
         self.constants = {}
-        self.networks = {"->" : Residual(), "&" : T_Norm()}
+        self.networks = {"->" : Residual(), "&" : T_Norm(), "~": Negation(lambda x : x)}
         self.rules = {}
         self.axioms = {}
         self.cons = {"&" : T_Norm, "|" : T_CoNorm, "->" : Residual}
@@ -27,7 +24,6 @@ class LogicNet:
 
     def variable(self, label, domain):
         self.variables[label] = list(map(lambda x : self.constants[x], domain))
-
 
     def predicate(self, predicate, network=False, arity=2, size = 10, overwrite = False):
         """
@@ -42,11 +38,9 @@ class LogicNet:
 
         if network:
             self.networks[predicate] = network
-
-        self.networks[predicate] = Predicate(size*arity)
-        #self.networks["~" + predicate] = Negation(self.networks[predicate])
+        else:
+            self.networks[predicate] = Predicate(size*arity)
         self.axioms[predicate] = [] # initializes list of training samples
-        #self.axioms["~" + predicate] = [] # initializes list of training samples
 
     def constant(self, name, definition=None, size=10, overwrite=False):
         """
@@ -75,9 +69,12 @@ class LogicNet:
         parsed_rule_axiom = parsed_rule[-1]  # remove variables
         vars = parsed_rule[1:-1]  # get variables
 
-        tree_rule = rule_to_tree(parsed_rule_axiom)
-        net = UQNetworkScalable(tree_rule, self.networks, vars, self.universal_aggregator)
+        tree_rule = rule_to_tree_augmented(parsed_rule_axiom)
+        net = UQNetworkScalableNew(tree_rule, self.networks, vars, self.universal_aggregator)
         self.rules[rule] = net
+
+    def function(self, name, size=10, arity=1):
+        self.networks[name] = Function(size=size*arity)
 
     def knowledge(self, kb_fact):
         """
@@ -93,6 +90,29 @@ class LogicNet:
         else:
             predicate = parsed_formula[0]
             self.axioms[predicate].append((parsed_formula[1], 1))
+
+    def zeroing(self):
+        criterion = nn.BCELoss()
+        learning_rate = 0.001
+        for i in range(0, 1):
+            for axiom in self.axioms:
+                model = self.networks[axiom]  # get the predicate network
+                optimizer = torch.optim.RMSprop(model.parameters(), lr=learning_rate)
+                training_examples = self.axioms[axiom]  # get the training samples related to the eaxiom
+
+                for training_example in training_examples:
+                    arguments_of_predicate = training_example[0]
+                    fuzzy_value_to_predict = 0
+
+                    input_to_model = self.aggregate_constants(arguments_of_predicate)
+
+                    output = model(input_to_model)
+                    target = torch.from_numpy(np.array([fuzzy_value_to_predict])).type(torch.FloatTensor)
+                    loss = criterion(output, target)  # compute loss
+
+                    optimizer.zero_grad()  # apply backpropagation
+                    loss.backward()
+                    optimizer.step()
 
     def update_constants(self, lr=0.1):
         """
@@ -119,19 +139,43 @@ class LogicNet:
             inputs.append(self.constants[a])
         return torch.cat(inputs)
 
+    def training_static_axiom(self, axiom):
+        model = self.networks[axiom]  # get the predicate network
+
+        training_examples = self.axioms[axiom]  # get the training samples related to the eaxiom
+        targets = []
+        outputs = []
+        for training_example in training_examples:
+            arguments_of_predicate = training_example[0]
+            fuzzy_value_to_predict = training_example[1]
+
+            current_input = []
+
+            for element in arguments_of_predicate:
+                current_input.append(self.constants[element])
+            value = model(*current_input)
+
+            outputs.append(value)
+
+            target = torch.from_numpy(np.array([fuzzy_value_to_predict])).type(torch.FloatTensor)
+            targets.append(target)
+
+        outputs = torch.stack(outputs)
+        targets = torch.cat(targets)
+
+        return torch.abs(outputs - targets)[0]
 
     def training_axiom(self, axiom):
         model = self.networks[axiom]  # get the predicate network
 
         training_examples = self.axioms[axiom]  # get the training samples related to the eaxiom
-
         targets = []
         inputs = []
 
         for training_example in training_examples:
-
             arguments_of_predicate = training_example[0]
             fuzzy_value_to_predict = training_example[1]
+
             input_to_model = self.aggregate_constants(arguments_of_predicate)
 
             target = torch.from_numpy(np.array([fuzzy_value_to_predict])).type(torch.FloatTensor)
@@ -151,20 +195,27 @@ class LogicNet:
         for var_inputs in batching(batch_size, prepare_iterator):
             variables = list(var_inputs)
             inputs = {}
+
             for index, var in enumerate(r_model.vars):
                 inputs[var] = list(map(lambda x: x[index], variables))
             output = r_model(inputs)
 
             rule_accumulator.append(output.reshape(-1))
+
         return 1 - self.universal_aggregator(torch.cat(rule_accumulator))
 
     def define_optimizer(self, learning_rate):
         parameters = set()
 
-        for neural in self.axioms:
-            parameters |= set(self.networks[neural].parameters())
         for const in self.constants:
             parameters |= set([self.constants[const]])
+
+        for val in self.networks:
+            try:
+                parameters |= set(self.networks[val].parameters())
+            except Exception as e:
+                print(e)
+                pass
 
         return torch.optim.Adam(parameters, lr=learning_rate)
 
@@ -180,31 +231,25 @@ class LogicNet:
             accumulate = []
 
             axioms = list(self.axioms.keys())
-            for i in range(0, 2):
-                for axiom in axioms:
-                    training_examples = self.axioms[axiom]  # get the training samples related to the axiom
+            for axiom in axioms:
+                training_examples = self.axioms[axiom]  # get the training samples related to the axiom
 
-                    if not training_examples:
-                        continue
+                if not training_examples:
+                    continue
 
+                if not self.networks[axiom].system:
+                    outputs = self.training_static_axiom(axiom)
+                else:
                     outputs = self.training_axiom(axiom)
-                    mean_value = torch.mean(outputs)
 
-                    optimize_net_values.append(mean_value.reshape(-1))
+                mean_value = torch.mean(outputs)
+                optimize_net_values.append(mean_value.reshape(-1))
 
-                    #output = torch.mean(torch.stack(optimize_net_values))
-                    #print(axiom, 1 - mean_value)
-                    accumulate.append(mean_value.item())
-                    #output.backward(retain_graph=True)
-                    #optimizer.step()
-
-                    #optimize_net_values = []
-                    #optimizer.zero_grad()
+                accumulate.append(mean_value.item())
 
             for rule, r_model in self.rules.items():
                 output = self.training_rule(rule, r_model, batch_size)
                 optimize_net_values.append(output.reshape(-1))
-                #print(rule, 1 - output)
 
                 accumulate.append(output.item())
 
@@ -229,8 +274,16 @@ class LogicNet:
             parsed_formula = parser._parse_formula(formula)
             model = self.networks[parsed_formula[0]]
             data = parsed_formula[1]
-            inputs = self.aggregate_constants(data)
             if verbose:
                 print(formula + ": ", end="")
-            return model(inputs).numpy()[0]
+            if not model.system:
+                current_input = []
+                for element in data:
+                    current_input.append(self.constants[element])
+                return model(*current_input)
+            else:
+                inputs = self.aggregate_constants(data)
+                if verbose:
+                    print(formula + ": ", end="")
+                return model(inputs).numpy()[0]
 

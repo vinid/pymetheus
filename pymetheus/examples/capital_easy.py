@@ -8,6 +8,8 @@ ll.constant("France")
 ll.constant("Paris")
 ll.constant("Milan")
 
+ll.function("f_country")
+
 ll.predicate("capital")
 ll.predicate("country")
 
@@ -21,6 +23,7 @@ ll.knowledge("country(Milan,Italy)")
 
 ll.knowledge("~country(Milan,France)")
 
+ll.knowledge("capital(Rome,Italy)")
 ll.knowledge("capital(Rome,Italy)")
 ll.knowledge("~country(Paris,Italy)")
 
@@ -53,6 +56,7 @@ ll.universal_rule(rule)
 ll.learn(epochs=1000, batch_size=25)
 print()
 print(ll.reason("country(Rome,Italy)", True))
+print(ll.reason("country(Paris,France)", True))
 print()
 print(ll.reason("capital(Italy,Italy)", True))
 print(ll.reason("capital(France,France)", True))
