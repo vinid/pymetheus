@@ -9,6 +9,12 @@ ll.constant("Rome")
 ll.constant("Italy")
 ll.constant("Paris")
 
+
+ll.variable("?a", ["Rome", "Paris"])
+
+print(ll.variables["?a"])
+exit()
+
 print("constants are vectors in a dictionary")
 print(ll.constants["Rome"])
 
