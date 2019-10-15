@@ -51,27 +51,27 @@ ll.variable("?c", nation)
 ll.variable("?d", nation)
 
 
-#ll.universal_rule("forall ?a, ?c, ?d: ~(city(?a,?c) & city(?a, ?d))")
+ll.universal_rule("forall ?a, ?c, ?d: ~(city(?a,?c) & city(?a, ?d))")
 
 ll.universal_rule("forall ?a,?b,?c: capital(?a,?c) -> (~equals(?b,?a) & ~capital(?b,?c))")
-ll.universal_rule("forall ?a,?b,?c: city(?a,?c) -> (~equals(?b,?a) & ~city(?b,?c))")
-ll.universal_rule("forall ?a: ~city(?a,?a)")
+#ll.universal_rule("forall ?a,?b,?c: city(?a,?c) -> (~equals(?b,?a) & ~city(?b,?c))")
+#ll.universal_rule("forall ?a: ~city(?a,?a)")
 
 
 ll.learn(epochs=200, batch_size=60)
 
 print()
-(ll.reason("city(Paris_fr,France)", True))
-(ll.reason("city(Paris_fr,UnitedStates)", True))
-(ll.reason("city(Nice_fr,France)", True))
-(ll.reason("city(Nice_fr,UnitedStates)", True))
-(ll.reason("city(Washingtondc_us,France)", True))
-(ll.reason("city(Washingtondc_us,UnitedStates)", True))
+print(ll.reason("city(Paris_fr,France)", True))
+print(ll.reason("city(Paris_fr,UnitedStates)", True))
+print(ll.reason("city(Nice_fr,France)", True))
+print(ll.reason("city(Nice_fr,UnitedStates)", True))
+print(ll.reason("city(Washingtondc_us,France)", True))
+print(ll.reason("city(Washingtondc_us,UnitedStates)", True))
 print()
-(ll.reason("capital(Nice_fr,France)", True))
-(ll.reason("equals(Paris_fr,Nice_fr)", True))
-(ll.reason("capital(Paris_fr,UnitedStates)", True))
-(ll.reason("capital(Washingtondc_us,UnitedStates)", True))
-(ll.reason("capital(Nice_fr,UnitedStates)", True))
+print(ll.reason("capital(Nice_fr,France)", True))
+print(ll.reason("equals(Paris_fr,Nice_fr)", True))
+print(ll.reason("capital(Paris_fr,UnitedStates)", True))
+print(ll.reason("capital(Washingtondc_us,UnitedStates)", True))
+print(ll.reason("capital(Nice_fr,UnitedStates)", True))
 
 

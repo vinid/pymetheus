@@ -275,16 +275,17 @@ class LogicNet:
             parsed_formula = parser._parse_formula(formula)
             model = self.networks[parsed_formula[0]]
             data = parsed_formula[1]
-            if verbose:
-                print(formula + ": ", end="")
+
             if not model.system:
                 current_input = []
                 for element in data:
                     current_input.append(self.constants[element])
+                if verbose:
+                    print(formula + ": " + str(model(*current_input).numpy()[0]), end="\n")
                 return model(*current_input)
             else:
                 inputs = self.aggregate_constants(data)
                 if verbose:
-                    print(formula + ": ", end="")
+                    print(formula + ": " + str(model(inputs).numpy()[0]), end="\n")
                 return model(inputs).numpy()[0]
 
