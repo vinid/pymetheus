@@ -188,7 +188,7 @@ class Function(nn.Module):
 class Predicate(nn.Module):
     def __init__(self, size):
         super(Predicate, self).__init__()
-        k = 20
+        k = 10
         self.system = True
 
         self.W = nn.Bilinear(size, size, k)

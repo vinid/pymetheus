@@ -55,7 +55,7 @@ class LogicNet:
             raise DobuleInitalizationException("Overwrite behaviour is off, error on double declaration of constant.", name)
 
         if definition:
-            self.constants[name] = definition
+            self.constants[name] = torch.Tensor(definition)
         else:
             self.constants[name] = Variable(torch.randn(size), requires_grad=True)
 
@@ -231,7 +231,9 @@ class LogicNet:
             accumulate = []
 
             axioms = list(self.axioms.keys())
+
             for axiom in axioms:
+
                 training_examples = self.axioms[axiom]  # get the training samples related to the axiom
 
                 if not training_examples:
@@ -256,7 +258,6 @@ class LogicNet:
             output = torch.mean(torch.stack(optimize_net_values))
             output.backward(retain_graph=True)
             optimizer.step()
-
 
             with torch.no_grad():
                 current_sat = 1 - np.mean(accumulate)
