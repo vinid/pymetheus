@@ -262,7 +262,7 @@ class LogicNet:
             with torch.no_grad():
                 current_sat = 1 - np.mean(accumulate)
 
-            if current_sat > 0.999:
+            if current_sat > 0.99:
                 break
 
             pbar.set_description("Current Satisfiability %f)" % (current_sat))
@@ -270,21 +270,48 @@ class LogicNet:
             pbar.update(1)
 
 
-    def reason(self, formula, verbose=False):
+    def reason(self, formula, verbose=False, batch_size=32):
         with torch.no_grad():
-            parsed_formula = parser._parse_formula(formula)
-            model = self.networks[parsed_formula[0]]
-            data = parsed_formula[1]
-            if not model.system:
-                current_input = []
-                for element in data:
-                    current_input.append(self.constants[element])
-                if verbose:
-                    print(formula + ": " + str(model(*current_input)), end="\n")
-                return model(*current_input)
+
+            if "forall" in formula:
+
+                parsed_rule = (parser._parse_formula(formula))
+                parsed_rule_axiom = parsed_rule[-1]  # remove variables
+                vars = parsed_rule[1:-1]  # get variables
+
+                tree_rule = rule_to_tree_augmented(parsed_rule_axiom)
+                r_model = UQNetworkScalableNew(tree_rule, self.networks, vars, self.universal_aggregator)
+
+                rule_accumulator = []
+                temp = {k: v for k, v in filter(lambda t: t[0] in r_model.vars, self.variables.items())}
+                prepare_iterator = (itertools.product(*temp.values()))
+                for var_inputs in batching(batch_size, prepare_iterator):
+                    variables = list(var_inputs)
+                    inputs = {}
+
+                    for index, var in enumerate(r_model.vars):
+                        inputs[var] = list(map(lambda x: x[index], variables))
+                    output = r_model(inputs)
+                    rule_accumulator.append(output.reshape(-1))
+                    value = self.universal_aggregator(torch.cat(rule_accumulator)).numpy()
+                    if verbose:
+                        print(formula + ": " + str(value), end="\n")
+                return value
             else:
-                inputs = self.aggregate_constants(data)
-                if verbose:
-                    print(formula + ": " + str(model(inputs).numpy()[0]), end="\n")
-                return model(inputs).numpy()[0]
+                parsed_formula = parser._parse_formula(formula)
+                model = self.networks[parsed_formula[0]]
+                data = parsed_formula[1]
+
+                if not model.system:
+                    current_input = []
+                    for element in data:
+                        current_input.append(self.constants[element])
+                    if verbose:
+                        print(formula + ": " + str(model(*current_input)), end="\n")
+                    return model(*current_input)
+                else:
+                    inputs = self.aggregate_constants(data)
+                    if verbose:
+                        print(formula + ": " + str(model(inputs).numpy()[0]), end="\n")
+                    return model(inputs).numpy()[0]
 

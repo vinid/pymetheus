@@ -21,8 +21,6 @@ ll.constant("Mole")
 ll.constant("Italian")
 ll.constant("French")
 
-ll.predicate("equals", network=lambda x : x)
-
 ll.predicate("location")
 ll.predicate("capital")
 ll.predicate("country")
@@ -63,14 +61,6 @@ ll.knowledge("country(Lion,France)")
 ll.knowledge("~country(Rome,France)")
 ll.knowledge("~country(Turin,France)")
 
-#ll.zeroing()
-# print(ll.reason("capital(Rome,Italy)"))
-# print(ll.reason("capital(Paris,Italy)"))
-# print(ll.reason("capital(Turin,Italy)"))
-# print(ll.reason("country(Turin,Italy)"))
-# print(ll.reason("country(Rome,Italy)"))
-# print(ll.reason("country(Paris,Italy)"))
-
 var = ["Paris", "France", "Italy", "Rome", "Milan", "Turin", "Lion", "Mole", "Duomo", "Trevi", "Berlin", "Monaco", "Germany", "Italian", "French"]
 ll.variable("?a", var)
 ll.variable("?b", var)
@@ -100,7 +90,7 @@ ll.universal_rule(rule_9)
 ll.universal_rule(rule_10)
 
 
-ll.learn(epochs=500, batch_size=100)
+ll.learn(epochs=500, batch_size=3375)
 
 print(ll.reason("capital(Paris,Italy)", True))
 print(ll.reason("country(Italy,Rome)", True))
