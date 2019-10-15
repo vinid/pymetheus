@@ -275,7 +275,6 @@ class LogicNet:
             parsed_formula = parser._parse_formula(formula)
             model = self.networks[parsed_formula[0]]
             data = parsed_formula[1]
-
             if not model.system:
                 current_input = []
                 for element in data:
