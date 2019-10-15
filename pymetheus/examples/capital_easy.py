@@ -65,5 +65,6 @@ print()
 (ll.reason("country(Milan,Italy)", True))
 (ll.reason("capital(Paris,France)", True))
 
+
 (ll.reason("forall ?a,?b: capital(?a,?b) -> country(?a,?b)", True))
 (ll.reason("forall ?a,?b: country(?a,?b) -> country(?a,?b)", True))
