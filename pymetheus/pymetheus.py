@@ -281,7 +281,7 @@ class LogicNet:
                 for element in data:
                     current_input.append(self.constants[element])
                 if verbose:
-                    print(formula + ": " + str(model(*current_input).numpy()[0]), end="\n")
+                    print(formula + ": " + str(model(*current_input)), end="\n")
                 return model(*current_input)
             else:
                 inputs = self.aggregate_constants(data)
