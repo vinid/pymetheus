@@ -187,7 +187,7 @@ def rule_to_tree_augmented(parsed_network, accum = "", number = 0):
 
     return MultiNode(parsed_network, [])
 
-# k = "forall ?a,?b: ~p(?a, ?b) & ~r(?a,?b)"
+# k = "forall ?a,?b,?c: capital(?a,?c) -> (~equals(?b,?a) & ~capital(?b,?c))"
 # rule = rule_parser._parse_formula(k)[-1]
 # multi = rule_to_tree_augmented(rule)
 #

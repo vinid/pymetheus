@@ -8,7 +8,6 @@ ll.constant("France")
 ll.constant("Paris")
 ll.constant("Milan")
 
-ll.function("f_country")
 
 ll.predicate("capital")
 ll.predicate("country")
@@ -48,16 +47,16 @@ rule_5 = "forall ?a: ~capital(?a,?a)"
 
 
 ll.universal_rule(rule)
-#ll.universal_rule(rule_2)
-#ll.universal_rule(rule_3)
-#ll.universal_rule(rule_4)
-#ll.universal_rule(rule_5)
+ll.universal_rule(rule_2)
+ll.universal_rule(rule_3)
+ll.universal_rule(rule_4)
+ll.universal_rule(rule_5)
 
-ll.learn(epochs=1000, batch_size=25)
+ll.learn(epochs=500, batch_size=99)
 print()
 (ll.reason("country(Rome,Italy)", True))
 (ll.reason("country(Paris,France)", True))
-()
+
 (ll.reason("capital(Italy,Italy)", True))
 (ll.reason("capital(France,France)", True))
 (ll.reason("capital(Rome,Italy)", True))
@@ -67,4 +66,5 @@ print()
 
 
 (ll.reason("forall ?a,?b: capital(?a,?b) -> country(?a,?b)", True))
+(ll.reason("~capital(Italy,Rome)", True))
 (ll.reason("forall ?a,?b: country(?a,?b) -> country(?a,?b)", True))

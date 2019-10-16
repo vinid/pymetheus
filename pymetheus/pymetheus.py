@@ -17,13 +17,12 @@ class LogicNet:
         self.networks = {"->" : Residual(), "&" : T_Norm(), "~": Negation(lambda x : x)}
         self.rules = {}
         self.axioms = {}
-        self.cons = {"&" : T_Norm, "|" : T_CoNorm, "->" : Residual}
         self.variables = {}
         self.final_aggregator = final_aggregator
         self.universal_aggregator = universal_aggregator
 
     def variable(self, label, domain):
-        self.variables[label] = list(map(lambda x : self.constants[x], domain))
+        self.variables[label] = list(map(lambda x :self.constants[x], domain))
 
     def predicate(self, predicate, network=False, arity=2, size = 10, overwrite = False):
         """
@@ -70,7 +69,7 @@ class LogicNet:
         vars = parsed_rule[1:-1]  # get variables
 
         tree_rule = rule_to_tree_augmented(parsed_rule_axiom)
-        net = UQNetworkScalableNew(tree_rule, self.networks, vars, self.universal_aggregator)
+        net = QuantifiedFormula(tree_rule, self.networks, vars, self.universal_aggregator)
         self.rules[rule] = net
 
     def function(self, name, size=10, arity=1):
@@ -152,7 +151,7 @@ class LogicNet:
             current_input = []
 
             for element in arguments_of_predicate:
-                current_input.append(self.constants[element])
+                current_input.append(self.constants[element].reshape(1, -1))
             value = model(*current_input)
 
             outputs.append(value)
@@ -188,16 +187,23 @@ class LogicNet:
         outputs = torch.abs(model(inputs) - targets)
         return outputs
 
-    def training_rule(self, rule, r_model, batch_size):
+    def training_rule(self, r_model, batch_size):
         rule_accumulator = []
-        temp = {k: v for k, v in filter(lambda t: t[0] in r_model.vars, self.variables.items())}
+        temp = {}
+        for k in r_model.vars:
+            temp[k] = self.variables[k]
+
+        #temp = {k: v for k, v in filter(lambda t: t[0] in r_model.vars, self.variables.items())}
+
         prepare_iterator = (itertools.product(*temp.values()))
         for var_inputs in batching(batch_size, prepare_iterator):
             variables = list(var_inputs)
             inputs = {}
 
+
             for index, var in enumerate(r_model.vars):
                 inputs[var] = list(map(lambda x: x[index], variables))
+
             output = r_model(inputs)
 
             rule_accumulator.append(output.reshape(-1))
@@ -230,33 +236,41 @@ class LogicNet:
             optimize_net_values = []
             accumulate = []
 
-            axioms = list(self.axioms.keys())
+            to_train = list(self.axioms.keys()) + list(self.rules.keys())
 
-            for axiom in axioms:
+            import random
+            random.shuffle(to_train)
 
-                training_examples = self.axioms[axiom]  # get the training samples related to the axiom
+            for a in self.variables:
+                random.shuffle(self.variables[a])
 
-                if not training_examples:
-                    continue
+            for rule_axiom in to_train:
+                if "forall" in rule_axiom:
+                    r_model = self.rules[rule_axiom]
+                    output = self.training_rule(r_model, batch_size)
+                    optimize_net_values.append(output.reshape(-1))
 
-                if not self.networks[axiom].system:
-                    outputs = self.training_static_axiom(axiom)
+                    accumulate.append(output.item())
                 else:
-                    outputs = self.training_axiom(axiom)
+                    axiom = rule_axiom
+                    training_examples = self.axioms[axiom]  # get the training samples related to the axiom
 
-                mean_value = torch.mean(outputs)
-                optimize_net_values.append(mean_value.reshape(-1))
+                    if not training_examples:
+                        continue
 
-                accumulate.append(mean_value.item())
+                    if not self.networks[axiom].system:
+                        outputs = self.training_static_axiom(axiom)
+                    else:
+                        outputs = self.training_axiom(axiom)
 
-            for rule, r_model in self.rules.items():
-                output = self.training_rule(rule, r_model, batch_size)
-                optimize_net_values.append(output.reshape(-1))
+                    mean_value = torch.mean(outputs)
 
-                accumulate.append(output.item())
+                    optimize_net_values.append(mean_value.reshape(-1))
+
+                    accumulate.append(mean_value.item())
 
             output = torch.mean(torch.stack(optimize_net_values))
-            output.backward(retain_graph=True)
+            output.backward()
             optimizer.step()
 
             with torch.no_grad():
@@ -272,7 +286,7 @@ class LogicNet:
 
     def reason(self, formula, verbose=False, batch_size=32):
         with torch.no_grad():
-
+            parsed_formula = parser._parse_formula(formula)
             if "forall" in formula:
 
                 parsed_rule = (parser._parse_formula(formula))
@@ -280,10 +294,15 @@ class LogicNet:
                 vars = parsed_rule[1:-1]  # get variables
 
                 tree_rule = rule_to_tree_augmented(parsed_rule_axiom)
-                r_model = UQNetworkScalableNew(tree_rule, self.networks, vars, self.universal_aggregator)
+                r_model = QuantifiedFormula(tree_rule, self.networks, vars, self.universal_aggregator)
 
                 rule_accumulator = []
-                temp = {k: v for k, v in filter(lambda t: t[0] in r_model.vars, self.variables.items())}
+                temp = {}
+                for k in r_model.vars:
+                    temp[k] = self.variables[k]
+
+                # temp = {k: v for k, v in filter(lambda t: t[0] in r_model.vars, self.variables.items())}
+
                 prepare_iterator = (itertools.product(*temp.values()))
                 for var_inputs in batching(batch_size, prepare_iterator):
                     variables = list(var_inputs)
@@ -293,22 +312,26 @@ class LogicNet:
                         inputs[var] = list(map(lambda x: x[index], variables))
                     output = r_model(inputs)
                     rule_accumulator.append(output.reshape(-1))
-                    value = self.universal_aggregator(torch.cat(rule_accumulator)).numpy()
-                    if verbose:
-                        print(formula + ": " + str(value), end="\n")
+                value = self.universal_aggregator(torch.cat(rule_accumulator)).numpy()
+                if verbose:
+                    print(formula + ": " + str(value), end="\n")
                 return value
             else:
-                parsed_formula = parser._parse_formula(formula)
-                model = self.networks[parsed_formula[0]]
-                data = parsed_formula[1]
+                if parsed_formula[0] == "~":
+                    predicate = parsed_formula[1][0]
+                    data = parsed_formula[1][1]
+                else:
+                    predicate = parsed_formula[0]
+                    data = parsed_formula[1]
 
+                model = self.networks[predicate]
                 if not model.system:
                     current_input = []
                     for element in data:
-                        current_input.append(self.constants[element])
+                        current_input.append(self.constants[element].reshape(1,-1))
                     if verbose:
-                        print(formula + ": " + str(model(*current_input)), end="\n")
-                    return model(*current_input)
+                        print(formula + ": " + str(model(*current_input).numpy()[0]), end="\n")
+                    return model(*current_input).numpy()[0]
                 else:
                     inputs = self.aggregate_constants(data)
                     if verbose:

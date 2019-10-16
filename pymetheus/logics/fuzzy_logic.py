@@ -4,12 +4,12 @@ import numpy as np
 import torch.nn.functional as F
 from pymetheus.utils.functionalities import *
 
-class UQNetworkScalableNew(nn.Module):
+class QuantifiedFormula(nn.Module):
     """
     Implements a universal quantified formula that supports batching
     """
     def __init__(self, parsed_rule, networks, variables, aggregation=lambda x: torch.mean(x)):
-        super(UQNetworkScalableNew, self).__init__()
+        super(QuantifiedFormula, self).__init__()
         self.parsed_rule = parsed_rule  # the rule
         self.vars = variables  # vars of the rule (?a, ?b)
         self.aggregator = aggregation  # (lambda x : torch.mean())
@@ -38,23 +38,26 @@ class UQNetworkScalableNew(nn.Module):
         if parsed.value in ["->", "&"]:
             left = self.compute(parsed.children[0], vars)
             right = self.compute(parsed.children[1], vars)
+
             before = self.nns[parsed.value](left, right)
 
-            operation = self.aggregator(before)
-
-            return operation
+            return before
 
         if parsed.value in ["~"]:
             return 1 - self.compute(parsed.children[0], vars)
 
         if parsed.value in self.nns.keys():
 
+
+
             accumulate = []
             for v in parsed.children:
                 accumulate.append(self.compute(v, vars))
 
             if not self.nns[parsed.value].system:
+
                 after_run = self.nns[parsed.value](*accumulate)
+
                 return after_run
 
             inputs = map(list, zip(*accumulate))
@@ -65,15 +68,16 @@ class UQNetworkScalableNew(nn.Module):
 
             val = self.nns[parsed.value](stack_inputs_for_network)
 
+
             return val
 
         if parsed.value[0] == "?":
+
             return torch.stack(vars[parsed.value])
 
-
-
     def forward(self, variables): # {"?a" : a, "?b" : b}
-        return self.compute(self.parsed_rule, variables)
+        computed = self.compute(self.parsed_rule, variables)
+        return computed
 
 
 class Function(nn.Module):
@@ -99,7 +103,9 @@ class Predicate(nn.Module):
         self.V = nn.Linear(size, k)
         self.u = nn.Linear(k, 1)
 
+
     def forward(self, x):
+
         first = self.W(x, x)
         second = self.V(x)
         output = torch.tanh(first+second)
@@ -123,9 +129,16 @@ class T_Norm(nn.Module):
         super(T_Norm, self).__init__()
 
     def forward(self, x, y):
-        val = x + y - 1
+        assert x.shape == y.shape
+        baseline = torch.from_numpy(np.array([0])).type(torch.FloatTensor)
 
-        return nn.functional.relu(val)
+        val = x + y - 1
+        # print(list(map(lambda  x: round(x.item()), x)))
+        # print()
+        # print(torch.max(baseline, val))
+        # input()
+
+        return torch.max(baseline, val)
 
 
 class T_CoNorm(nn.Module):
@@ -135,7 +148,9 @@ class T_CoNorm(nn.Module):
         self.second = second
 
     def forward(self, x, y):
-        return torch.max([1, x + y])
+        assert x.shape == y.shape
+        baseline = torch.from_numpy(np.array([1])).type(torch.FloatTensor)
+        return torch.max(baseline, x + y)
 
 
 class Residual(nn.Module):
@@ -144,5 +159,5 @@ class Residual(nn.Module):
 
     def forward(self, x, y):
         baseline = torch.from_numpy(np.array([1])).type(torch.FloatTensor)
-
+        assert x.shape == y.shape
         return torch.min(baseline, 1 - x + y)

@@ -86,8 +86,8 @@ ll.universal_rule(rule_5)
 ll.universal_rule(rule_6)
 ll.universal_rule(rule_7)
 ll.universal_rule(rule_8)
-ll.universal_rule(rule_9)
-ll.universal_rule(rule_10)
+#ll.universal_rule(rule_9)
+#ll.universal_rule(rule_10)
 
 
 ll.learn(epochs=500, batch_size=3375)
