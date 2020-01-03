@@ -14,17 +14,21 @@ class LogicNet:
                  universal_aggregator = (lambda x : 1/torch.mean(1/(x+1e-10)))): # ()
 
         self.constants = {}
-        self.networks = {"->" : Residual(), "&" : T_Norm(), "~": Negation(lambda x : x)}
+        self.networks = {"->" : Residual(), "&" : T_Norm(), "~": Negation(lambda x : x), "|" : T_CoNorm()}
         self.rules = {}
         self.axioms = {}
         self.variables = {}
         self.final_aggregator = final_aggregator
         self.universal_aggregator = universal_aggregator
 
-    def variable(self, label, domain):
-        self.variables[label] = list(map(lambda x :self.constants[x], domain))
 
-    def predicate(self, predicate, network=False, arity=2, size = 10, overwrite = False):
+    def variable(self, label, domain, named=True):
+        if named:
+            self.variables[label] = list(map(lambda x :self.constants[x], domain))
+        else:
+            self.variables[label] = list(map(lambda x :torch.Tensor(x), domain))
+    
+    def predicate(self, predicate, network=False, arity=2, size = 15, overwrite = False):
         """
         Creates a Neural Network for a string symbol that identifies a predicate
         :param predicate:
@@ -41,7 +45,7 @@ class LogicNet:
             self.networks[predicate] = Predicate(size*arity)
         self.axioms[predicate] = [] # initializes list of training samples
 
-    def constant(self, name, definition=None, size=10, overwrite=False):
+    def constant(self, name, definition=None, size=2, overwrite=False):
         """
         Creates a (logical) constant in the model. The representation for the constant can be given or learned
         :param name:
@@ -52,8 +56,7 @@ class LogicNet:
         """
         if name in self.constants and overwrite == False:
             raise DobuleInitalizationException("Overwrite behaviour is off, error on double declaration of constant.", name)
-
-        if definition:
+        if type(definition) != type(None):
             self.constants[name] = torch.Tensor(definition)
         else:
             self.constants[name] = Variable(torch.randn(size), requires_grad=True)
@@ -72,7 +75,7 @@ class LogicNet:
         net = QuantifiedFormula(tree_rule, self.networks, vars, self.universal_aggregator)
         self.rules[rule] = net
 
-    def function(self, name, size=10, arity=1):
+    def function(self, name, size=15, arity=1):
         self.networks[name] = Function(size=size*arity)
 
     def knowledge(self, kb_fact):
@@ -96,7 +99,7 @@ class LogicNet:
         for i in range(0, 1):
             for axiom in self.axioms:
                 model = self.networks[axiom]  # get the predicate network
-                optimizer = torch.optim.RMSprop(model.parameters(), lr=learning_rate)
+                optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, momentum = 0.9)
                 training_examples = self.axioms[axiom]  # get the training samples related to the eaxiom
 
                 for training_example in training_examples:
@@ -288,26 +291,20 @@ class LogicNet:
         with torch.no_grad():
             parsed_formula = parser._parse_formula(formula)
             if "forall" in formula:
-
                 parsed_rule = (parser._parse_formula(formula))
                 parsed_rule_axiom = parsed_rule[-1]  # remove variables
                 vars = parsed_rule[1:-1]  # get variables
-
                 tree_rule = rule_to_tree_augmented(parsed_rule_axiom)
                 r_model = QuantifiedFormula(tree_rule, self.networks, vars, self.universal_aggregator)
-
                 rule_accumulator = []
                 temp = {}
                 for k in r_model.vars:
                     temp[k] = self.variables[k]
-
                 # temp = {k: v for k, v in filter(lambda t: t[0] in r_model.vars, self.variables.items())}
-
                 prepare_iterator = (itertools.product(*temp.values()))
                 for var_inputs in batching(batch_size, prepare_iterator):
                     variables = list(var_inputs)
                     inputs = {}
-
                     for index, var in enumerate(r_model.vars):
                         inputs[var] = list(map(lambda x: x[index], variables))
                     output = r_model(inputs)
@@ -323,18 +320,29 @@ class LogicNet:
                 else:
                     predicate = parsed_formula[0]
                     data = parsed_formula[1]
-
                 model = self.networks[predicate]
                 if not model.system:
                     current_input = []
                     for element in data:
                         current_input.append(self.constants[element].reshape(1,-1))
-                    if verbose:
-                        print(formula + ": " + str(model(*current_input).numpy()[0]), end="\n")
-                    return model(*current_input).numpy()[0]
+                    val = model(*current_input).numpy()[0]
+                    if parsed_formula[0] == "~":
+                        if verbose:
+                            print(formula + ": " + str(1-val), end="\n")
+                        return 1 - model(*current_input).numpy()[0]
+                    else:
+                        if verbose:
+                            print(formula + ": " + str(val), end="\n")
+                        return model(*current_input).numpy()[0]
                 else:
                     inputs = self.aggregate_constants(data)
-                    if verbose:
-                        print(formula + ": " + str(model(inputs).numpy()[0]), end="\n")
-                    return model(inputs).numpy()[0]
+                    val = model(inputs).numpy()[0]
+                    if parsed_formula[0] == "~":
+                        if verbose:
+                            print(formula + ": " + str(1-val), end="\n")
+                        return 1-val
+                    else:
+                        if verbose:
+                            print(formula + ": " + str(val), end="\n")
+                        return val
 

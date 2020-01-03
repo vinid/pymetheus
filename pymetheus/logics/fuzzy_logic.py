@@ -35,7 +35,7 @@ class QuantifiedFormula(nn.Module):
         return torch.cat(inputs)
 
     def compute(self, parsed, vars):
-        if parsed.value in ["->", "&"]:
+        if parsed.value in ["->", "&", "|"]:
             left = self.compute(parsed.children[0], vars)
             right = self.compute(parsed.children[1], vars)
 
@@ -98,14 +98,14 @@ class Predicate(nn.Module):
         super(Predicate, self).__init__()
         k = 10
         self.system = True
-
+	
         self.W = nn.Bilinear(size, size, k)
         self.V = nn.Linear(size, k)
         self.u = nn.Linear(k, 1)
 
 
     def forward(self, x):
-
+	
         first = self.W(x, x)
         second = self.V(x)
         output = torch.tanh(first+second)
@@ -142,11 +142,8 @@ class T_Norm(nn.Module):
 
 
 class T_CoNorm(nn.Module):
-    def __init__(self, first, second):
+    def __init__(self):
         super(T_CoNorm, self).__init__()
-        self.first = first
-        self.second = second
-
     def forward(self, x, y):
         assert x.shape == y.shape
         baseline = torch.from_numpy(np.array([1])).type(torch.FloatTensor)
