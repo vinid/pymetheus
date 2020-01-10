@@ -35,7 +35,7 @@ class QuantifiedFormula(nn.Module):
         return torch.cat(inputs)
 
     def compute(self, parsed, vars):
-        if parsed.value in ["->", "&", "|"]:
+        if parsed.value in ["->", "&", "|", "%"]:
             left = self.compute(parsed.children[0], vars)
             right = self.compute(parsed.children[1], vars)
 
@@ -98,14 +98,14 @@ class Predicate(nn.Module):
         super(Predicate, self).__init__()
         k = 10
         self.system = True
-	
+
         self.W = nn.Bilinear(size, size, k)
         self.V = nn.Linear(size, k)
         self.u = nn.Linear(k, 1)
 
 
     def forward(self, x):
-	
+
         first = self.W(x, x)
         second = self.V(x)
         output = torch.tanh(first+second)
@@ -125,6 +125,7 @@ class Negation(nn.Module):
 
 
 class T_Norm(nn.Module):
+    # Luk
     def __init__(self):
         super(T_Norm, self).__init__()
 
@@ -133,15 +134,13 @@ class T_Norm(nn.Module):
         baseline = torch.from_numpy(np.array([0])).type(torch.FloatTensor)
 
         val = x + y - 1
-        # print(list(map(lambda  x: round(x.item()), x)))
-        # print()
-        # print(torch.max(baseline, val))
-        # input()
+
 
         return torch.max(baseline, val)
 
 
 class T_CoNorm(nn.Module):
+    # Luk
     def __init__(self):
         super(T_CoNorm, self).__init__()
     def forward(self, x, y):
@@ -149,8 +148,18 @@ class T_CoNorm(nn.Module):
         baseline = torch.from_numpy(np.array([1])).type(torch.FloatTensor)
         return torch.max(baseline, x + y)
 
+class T_Equal(nn.Module):
+    def __init__(self):
+        super(T_Equal, self).__init__()
+
+    def forward(self, x, y):
+        assert x.shape == y.shape
+
+        return (1 - torch.abs(x - y))
+
 
 class Residual(nn.Module):
+    # Luk
     def __init__(self):
         super(Residual, self).__init__()
 

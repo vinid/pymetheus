@@ -14,7 +14,7 @@ class LogicNet:
                  universal_aggregator = (lambda x : 1/torch.mean(1/(x+1e-10)))): # ()
 
         self.constants = {}
-        self.networks = {"->" : Residual(), "&" : T_Norm(), "~": Negation(lambda x : x), "|" : T_CoNorm()}
+        self.networks = {"->" : Residual(), "&" : T_Norm(), "~": Negation(lambda x : x), "|" : T_CoNorm(), "%" : T_Equal()}
         self.rules = {}
         self.axioms = {}
         self.variables = {}
@@ -27,7 +27,7 @@ class LogicNet:
             self.variables[label] = list(map(lambda x :self.constants[x], domain))
         else:
             self.variables[label] = list(map(lambda x :torch.Tensor(x), domain))
-    
+
     def predicate(self, predicate, network=False, arity=2, size = 15, overwrite = False):
         """
         Creates a Neural Network for a string symbol that identifies a predicate
@@ -45,7 +45,7 @@ class LogicNet:
             self.networks[predicate] = Predicate(size*arity)
         self.axioms[predicate] = [] # initializes list of training samples
 
-    def constant(self, name, definition=None, size=2, overwrite=False):
+    def constant(self, name, definition=None, size=2,  update=False, overwrite=False):
         """
         Creates a (logical) constant in the model. The representation for the constant can be given or learned
         :param name:
@@ -56,8 +56,12 @@ class LogicNet:
         """
         if name in self.constants and overwrite == False:
             raise DobuleInitalizationException("Overwrite behaviour is off, error on double declaration of constant.", name)
+
         if type(definition) != type(None):
-            self.constants[name] = torch.Tensor(definition)
+            if update:
+                self.constants[name] = Variable(torch.Tensor(definition), requires_grad=True)
+            else:
+                self.constants[name] = torch.Tensor(definition)
         else:
             self.constants[name] = Variable(torch.randn(size), requires_grad=True)
 
