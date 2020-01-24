@@ -90,7 +90,7 @@ ll.universal_rule(rule_8)
 #ll.universal_rule(rule_10)
 
 
-ll.learn(epochs=500, batch_size=3375)
+ll.learn(epochs=40, batch_size=3375)
 
 print(ll.reason("capital(Paris,Italy)", True))
 print(ll.reason("country(Italy,Rome)", True))

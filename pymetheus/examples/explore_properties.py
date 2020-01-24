@@ -13,7 +13,7 @@ ll.constant("Paris")
 ll.variable("?a", ["Rome", "Paris"])
 
 print(ll.variables["?a"])
-exit()
+
 
 print("constants are vectors in a dictionary")
 print(ll.constants["Rome"])
@@ -28,7 +28,7 @@ print()
 ll.knowledge("country(Rome,Italy)")
 ll.knowledge("~country(Paris,Italy)")
 print("training samples are stored as tuples")
-print(ll.axioms["country"])
+print(ll.axioms)
 
 
 print()

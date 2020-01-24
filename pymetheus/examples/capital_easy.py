@@ -52,7 +52,7 @@ ll.universal_rule(rule_3)
 ll.universal_rule(rule_4)
 ll.universal_rule(rule_5)
 
-ll.learn(epochs=500, batch_size=99)
+ll.fit(epochs=1500, grouping=99)
 print()
 (ll.reason("country(Rome,Italy)", True))
 (ll.reason("country(Paris,France)", True))

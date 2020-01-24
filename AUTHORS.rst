@@ -5,7 +5,7 @@ Credits
 Development Lead
 ----------------
 
-* Federico Bianchi <federico.bianchi@unimib.it>
+* Federico Bianchi <f.bianchi@unibocconi.it>
 
 Contributors
 ------------
