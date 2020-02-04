@@ -65,11 +65,11 @@ class LogicNet:
 
         if type(definition) != type(None):
             if optimize:
-                self.constants[name] = torch.tensor(definition, requires_grad=True,  device=device)
+                self.constants[name] = Variable(torch.Tensor(definition), requires_grad=True).to(device).float()
             else:
-                self.constants[name] = torch.Tensor(definition)
+                self.constants[name] = torch.tensor(definition, device=device).float()
         else:
-            self.constants[name] = torch.randn(argument_size, requires_grad=True, device=device)
+            self.constants[name] = torch.randn(argument_size, requires_grad=True, device=device).float()
 
     def universal_rule(self, rule):
         """
@@ -274,7 +274,7 @@ class LogicNet:
 
                 current_input = []
                 for element in data:
-                    current_input.append(self.constants[element].reshape(1, -1))
+                    current_input.append(self.constants[element].to(device).reshape(1, -1))
 
                 val = model(current_input).cpu().detach().numpy()[0][0]
                 if parsed_formula[0] == "~":
