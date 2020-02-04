@@ -65,7 +65,7 @@ class LogicNet:
 
         if type(definition) != type(None):
             if optimize:
-                self.constants[name] = Variable(torch.Tensor(definition), requires_grad=True,  device=device)
+                self.constants[name] = torch.Tensor(definition, requires_grad=True,  device=device)
             else:
                 self.constants[name] = torch.Tensor(definition)
         else:
