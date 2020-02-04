@@ -43,7 +43,6 @@ ll.knowledge("country(Turin,Italy)")
 
 ll.knowledge("~capital(Turin,Italy)")
 
-
 ll.knowledge("~country(Rome,France)")
 
 ll.knowledge("capital(Paris,France)")
@@ -90,7 +89,7 @@ ll.universal_rule(rule_8)
 #ll.universal_rule(rule_10)
 
 
-ll.learn(epochs=40, batch_size=3375)
+ll.fit(epochs=1025, grouping=3375)
 
 print(ll.reason("capital(Paris,Italy)", True))
 print(ll.reason("country(Italy,Rome)", True))

@@ -17,7 +17,7 @@ class T_Norm(nn.Module):
 
     def forward(self, x, y):
         assert x.shape == y.shape
-        baseline = torch.from_numpy(np.array([0])).type(torch.FloatTensor)
+        baseline = torch.from_numpy(np.array([0])).type(torch.FloatTensor).to("cuda")
 
         val = x + y - 1
 
@@ -30,7 +30,7 @@ class T_CoNorm(nn.Module):
 
     def forward(self, x, y):
         assert x.shape == y.shape
-        baseline = torch.from_numpy(np.array([1])).type(torch.FloatTensor)
+        baseline = torch.from_numpy(np.array([1])).type(torch.FloatTensor).to("cuda")
         return torch.max(baseline, x + y)
 
 class Equal(nn.Module):
@@ -48,6 +48,6 @@ class Residual(nn.Module):
         super(Residual, self).__init__()
 
     def forward(self, x, y):
-        baseline = torch.from_numpy(np.array([1])).type(torch.FloatTensor)
+        baseline = torch.from_numpy(np.array([1])).type(torch.FloatTensor).to("cuda")
         assert x.shape == y.shape
         return torch.min(baseline, 1 - x + y)

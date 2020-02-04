@@ -30,9 +30,9 @@ for a, b in relationships:
 
 #ll.zeroing()
 
-ll.variable("?a", entities)
-ll.variable("?b", entities)
-ll.variable("?c", entities)
+ll.variable("?a", entities, labelled=True)
+ll.variable("?b", entities, labelled=True)
+ll.variable("?c", entities, labelled=True)
 
 rule_3 = "forall ?a,?b,?c: (subclass(?a,?b) & subclass(?b, ?c)) -> subclass(?a,?c)"
 rule_5 = "forall ?a: ~subclass(?a,?a)"
@@ -42,7 +42,7 @@ ll.universal_rule(rule_3)
 ll.universal_rule(rule_5)
 ll.universal_rule(rule_7)
 
-ll.learn(epochs=1000, batch_size=1000)
+ll.fit(epochs=1000, grouping=20)
 
 data_ri = pd.read_csv("https://raw.githubusercontent.com/vinid/ltns-experiments/master/experiments/gold_standard/closed_tx", sep=",", names=["A", "B", "T"])
 
