@@ -71,24 +71,19 @@ Features
 
     rule = "forall ?a,?b: capital(?a,?b) -> country(?a,?b)"
     ll.universal_rule(rule)
-
-    constants = ["Milan", "Rome", "Italy"]
-
-    comp = itertools.product(constants, constants)
-
-    data = []
-    for a,b in comp:
-        data.append({"?a" : a, "?b" : b})
+    var = ["Italy", "Rome", "Milan"]
+    ll.variable("?a", var)
+    ll.variable("?b", var)
 ..
 
 * Learn and Reason
 
 .. code-block:: python
 
-    ll.learn(data, epoch=100)
+    ll.learn(epochs=1000, batch_size=25)
 
 
-    ll.predict("capital(Paris,Italy)")
+    ll.reason("capital(Rome,Italy)", True)
 ..
 
 Credits

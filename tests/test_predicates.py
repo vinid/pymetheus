@@ -7,7 +7,7 @@ class TestPredicatesClass:
 
         with pytest.raises(DobuleInitalizationException):
             logicnet = LogicNet()
-            logicnet.predicate("country", size=10)
-            logicnet.predicate("country", size=10)
+            logicnet.predicate("country", argument_size=10)
+            logicnet.predicate("country", argument_size=10)
 
 

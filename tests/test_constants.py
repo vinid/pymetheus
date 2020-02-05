@@ -5,7 +5,7 @@ class TestConstantsClass:
 
     def test_size(self):
         logicnet = LogicNet()
-        logicnet.constant("Rome", size=10)
+        logicnet.constant("Rome", argument_size=10)
 
         assert len(logicnet.constants["Rome"]) == 10
 
@@ -13,8 +13,8 @@ class TestConstantsClass:
 
         with pytest.raises(DobuleInitalizationException):
             logicnet = LogicNet()
-            logicnet.constant("Rome", size=10)
-            logicnet.constant("Rome", size=10)
+            logicnet.constant("Rome", argument_size=10)
+            logicnet.constant("Rome", argument_size=10)
 
 
 
