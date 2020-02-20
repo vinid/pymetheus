@@ -11,11 +11,10 @@ from pymetheus.utils.functionalities import batching
 import random
 from pymetheus.logics import logics
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-
 class LogicNet:
     def __init__(self, universal_aggregator=lambda x : torch.mean(x), differentiable_logic=logics.LukasiewiczLogic()): # ()
+
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
         self.constants = {}
         self.networks = {"->": differentiable_logic.residual,
@@ -41,22 +40,22 @@ class LogicNet:
         :param size:
         :return:
         """
-
         if predicate in self.networks.keys() and overwrite == False:
             raise DobuleInitalizationException("Overwrite behaviour is off, error on double declaration of predicate.", predicate)
 
         if network:
             self.networks[predicate] = network
         else:
-            self.networks[predicate] = Predicate(argument_size*arity).to(device)
+            self.networks[predicate] = Predicate(argument_size*arity).to(self.device)
         self.axioms[predicate] = [] # initializes list of training samples
 
     def constant(self, name, definition=None, argument_size=5,  optimize=False, overwrite=False):
         """
         Creates a (logical) constant in the model. The representation for the constant can be given or learned
-        :param name:
-        :param definition:
-        :param size:
+        :param name: name of the constant
+        :param definition: numpy definition of the variable
+        :param argument_size: size of the constant
+        :param optimize:
         :param overwrite:
         :return:
         """
@@ -65,11 +64,11 @@ class LogicNet:
 
         if type(definition) != type(None):
             if optimize:
-                self.constants[name] = Variable(torch.Tensor(definition), requires_grad=True).to(device).float()
+                self.constants[name] = Variable(torch.Tensor(definition), requires_grad=True).to(self.device).float()
             else:
-                self.constants[name] = torch.tensor(definition, device=device).float()
+                self.constants[name] = torch.tensor(definition, device=self.device).float()
         else:
-            self.constants[name] = torch.randn(argument_size, requires_grad=True, device=device).float()
+            self.constants[name] = torch.randn(argument_size, requires_grad=True, device=self.device).float()
 
     def universal_rule(self, rule):
         """
@@ -86,6 +85,13 @@ class LogicNet:
         self.rules[rule] = net
 
     def function(self, name, in_size, out_size):
+        """
+        Defines a function R^n -> R^m
+        :param name:
+        :param in_size:
+        :param out_size:
+        :return:
+        """
         self.networks[name] = Function(in_size, out_size)
 
     def knowledge(self, fact):
@@ -126,7 +132,7 @@ class LogicNet:
         targets = list(targets)
         inputs = list(inputs)
 
-        targets = torch.stack(targets).to(device)
+        targets = torch.stack(targets).to(self.device)
         send = list(zip(*inputs))
         send = map(list, send)
 
@@ -237,7 +243,6 @@ class LogicNet:
 
             pbar.update(1)
 
-
     def reason(self, formula, verbose=False, grouping=32):
         with torch.no_grad():
             parsed_formula = parser._parse_formula(formula)
@@ -274,7 +279,7 @@ class LogicNet:
 
                 current_input = []
                 for element in data:
-                    current_input.append(self.constants[element].to(device).reshape(1, -1))
+                    current_input.append(self.constants[element].to(self.device).reshape(1, -1))
 
                 val = model(current_input).cpu().detach().numpy()[0][0]
                 if parsed_formula[0] == "~":

@@ -120,8 +120,8 @@ class Predicate(nn.Module):
 
         data = positions + data
         queries = self.toqueries(data).view(b, t, k)
-        keys = self.tokeys(data)   .view(b, t, k)
-        values = self.tovalues(data)   .view(b, t, k)
+        keys = self.tokeys(data).view(b, t, k)
+        values = self.tovalues(data).view(b, t, k)
 
         keys = keys.transpose(1, 2).contiguous().view(b , t, k)
         queries = queries.transpose(1, 2).contiguous().view(b, t, k)
@@ -153,8 +153,8 @@ class Predicate(nn.Module):
         weights = F.softmax(raw_weights, dim=2)
 
         y = torch.bmm(weights, data)
-
         #v = y.reshape(b, t*k)
+
         y = y.mean(dim=1)
 
         return y

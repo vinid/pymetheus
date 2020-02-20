@@ -1,6 +1,5 @@
 import collections
 from itertools import chain, islice
-from pymetheus.parser import rule_parser
 
 def harmonic_mean(input):
     return input.pow(-1).mean().pow(-1)
@@ -12,9 +11,6 @@ class Node(object):
         self.value = value  # The node value
         self.left = left    # Left child
         self.right = right  # Right child
-
-
-
 
 def get_networks_ids(node):
     """
@@ -46,93 +42,12 @@ def batching(n, iterable):
         except StopIteration:
             return
 
-
 def flatten(l):
     for el in l:
         if isinstance(el, collections.Iterable) and not isinstance(el, (str, bytes)):
             yield from flatten(el)
         else:
             yield el
-
-
-def rule_to_tree(parsed_network):
-    """
-    Takes a parsed network and generates a tree structure
-    :param parsed_network:
-    :return:
-    """
-    if len(parsed_network) == 3:
-        left_tree = rule_to_tree(parsed_network[0])
-        right_tree = rule_to_tree(parsed_network[2])
-
-        node = Node(parsed_network[1])
-
-        node.left = left_tree
-        node.right = right_tree
-        return node
-    else:
-        return Node(parsed_network)
-
-    # if parsed_network[0] in ["p", "r", "~"]:
-    #     node = MultiNode(parsed_network[0])
-    #     print(accum, "main", parsed_network, "node", parsed_network[0], "parse:", parsed_network[1:][0], len(parsed_network[1:][0]))
-    #     for a in parsed_network[1:][0]:
-    #         ruled_a = rule_to_tree_augmented(a, accum = accum + "\t", number = number + 1)
-    #         node.children.append(ruled_a)
-    #     return node
-    #
-    # print("oiii", number, parsed_network)
-    # return "-"
-
-    # if parsed_network[0].startswith("?"):
-    #         print(accum, parsed_network)
-    #         return MultiNode(parsed_network)
-
-
-    # if isinstance(parsed_network[1], list):
-    #     for a in parsed_network
-    #
-    # if len(parsed_network) == 2:  # function
-    #     try:
-    #         if parsed_network[1].startswith("?"):
-    #             child_left = MultiNode(parsed_network[1])
-    #         elif isinstance(parsed_network[1][0], list):
-    #             child_left = rule_to_tree_augmented(parsed_network[1][0])
-    #         else:
-    #             child_left = MultiNode(parsed_network[1][0])
-    #     except:
-    #         child_left = MultiNode(parsed_network[1][0])
-    #
-    #     try:
-    #         if isinstance(parsed_network[1][1], list):
-    #             child_right = rule_to_tree_augmented(parsed_network[1][1])
-    #         else:
-    #             child_right = MultiNode(parsed_network[1][1])
-    #     except:
-    #         child_right = MultiNode(parsed_network[1][1])
-    #
-    #     if isinstance(parsed_network[0], list):
-    #         node = rule_to_tree_augmented(parsed_network[0])
-    #     else:
-    #         node = MultiNode(parsed_network[0])
-    #
-    #     node.children = [child_left, child_right]
-    #     return node
-
-    # if len(parsed_network) == 3:
-    #     left_tree = rule_to_tree_augmented(parsed_network[0])
-    #     right_tree = rule_to_tree_augmented(parsed_network[2])
-    #
-    #     node = MultiNode(parsed_network[1])
-    #
-    #     node.children = [left_tree, right_tree]
-    #
-    #     return node
-    # else:
-    #     return MultiNode(parsed_network)
-
-
-
 
 def exploring(node, accum = ""):
     print(accum + str(node.value))
@@ -156,7 +71,7 @@ class MultiNode(object):
         self.value = value
         self.children = children
 
-def rule_to_tree_augmented(parsed_network, accum = "", number = 0):
+def rule_to_tree_augmented(parsed_network, number = 0):
     """
     Takes a parsed network and generates a tree structure
     :param parsed_network:
@@ -187,16 +102,6 @@ def rule_to_tree_augmented(parsed_network, accum = "", number = 0):
 
     return MultiNode(parsed_network, [])
 
-# k = "forall ?a,?b,?c: capital(?a,?c) -> (~equals(?b,?a) & ~capital(?b,?c))"
-# rule = rule_parser._parse_formula(k)[-1]
-# multi = rule_to_tree_augmented(rule)
-#
-# print()
-# print()
-# (exploring(multi))
-# print()
-# print()
-# print(list(get_all_networks(multi)))
 
 
 
