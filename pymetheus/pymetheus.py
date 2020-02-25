@@ -1,27 +1,31 @@
 # -*- coding: utf-8 -*-
 """Main module."""
-from pymetheus.utils.exceptions import DobuleInitalizationException
-import tqdm
+import itertools
+import random
+
 import numpy as np
+import tqdm
 from torch.autograd import Variable
+
+from pymetheus.logics import LogicEnum, Logic
 from pymetheus.logics.fuzzy_logic import *
 from pymetheus.parser import rule_parser as parser
-import itertools
+from pymetheus.utils.exceptions import DobuleInitalizationException
 from pymetheus.utils.functionalities import batching
-import random
-from pymetheus.logics import logics
+
 
 class LogicNet:
-    def __init__(self, universal_aggregator=lambda x : torch.mean(x), differentiable_logic=logics.LukasiewiczLogic()): # ()
+    def __init__(self, universal_aggregator=lambda x: torch.mean(x),
+                 differentiable_logic: Logic = LogicEnum.default().value):
 
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.device = get_torch_device()
 
         self.constants = {}
         self.networks = {"->": differentiable_logic.residual,
-                         "&": differentiable_logic.tnorm,
+                         "&": differentiable_logic.t_norm,
                          "~": differentiable_logic.negation,
-                         "|": differentiable_logic.tconrom,
-                         "%": differentiable_logic.equality}
+                         "|": differentiable_logic.t_conorm,
+                         "%": differentiable_logic.equal}
         self.rules = {}
         self.axioms = {}
         self.variables = {}
@@ -29,11 +33,11 @@ class LogicNet:
 
     def variable(self, label, domain, labelled=True):
         if labelled:
-            self.variables[label] = list(map(lambda x : self.constants[x], domain))
+            self.variables[label] = list(map(lambda x: self.constants[x], domain))
         else:
-            self.variables[label] = list(map(lambda x : torch.Tensor(x), domain))
+            self.variables[label] = list(map(lambda x: torch.Tensor(x), domain))
 
-    def predicate(self, predicate, network=False, arity=2, argument_size=5, overwrite = False):
+    def predicate(self, predicate, network=False, arity=2, argument_size=5, overwrite=False):
         """
         Creates a Neural Network for a string symbol that identifies a predicate
         :param predicate:
@@ -41,15 +45,16 @@ class LogicNet:
         :return:
         """
         if predicate in self.networks.keys() and overwrite == False:
-            raise DobuleInitalizationException("Overwrite behaviour is off, error on double declaration of predicate.", predicate)
+            raise DobuleInitalizationException("Overwrite behaviour is off, error on double declaration of predicate.",
+                                               predicate)
 
         if network:
             self.networks[predicate] = network
         else:
-            self.networks[predicate] = Predicate(argument_size*arity).to(self.device)
-        self.axioms[predicate] = [] # initializes list of training samples
+            self.networks[predicate] = Predicate(argument_size * arity).to(self.device)
+        self.axioms[predicate] = []  # initializes list of training samples
 
-    def constant(self, name, definition=None, argument_size=5,  optimize=False, overwrite=False):
+    def constant(self, name, definition=None, argument_size=5, optimize=False, overwrite=False):
         """
         Creates a (logical) constant in the model. The representation for the constant can be given or learned
         :param name: name of the constant
@@ -60,7 +65,8 @@ class LogicNet:
         :return:
         """
         if name in self.constants and overwrite == False:
-            raise DobuleInitalizationException("Overwrite behaviour is off, error on double declaration of constant.", name)
+            raise DobuleInitalizationException("Overwrite behaviour is off, error on double declaration of constant.",
+                                               name)
 
         if type(definition) != type(None):
             if optimize:
@@ -147,7 +153,7 @@ class LogicNet:
         for k in r_model.vars:
             temp[k] = self.variables[k]
 
-        #temp = {k: v for k, v in filter(lambda t: t[0] in r_model.vars, self.variables.items())}
+        # temp = {k: v for k, v in filter(lambda t: t[0] in r_model.vars, self.variables.items())}
 
         # {?a : v_Rome, v_Paris, ?b : v_Italy, v_France}
         # forall ?a,?b K(?a,?b) -> P(?b,?a)
@@ -182,7 +188,7 @@ class LogicNet:
                 print(e)
                 pass
         return torch.optim.Adam(parameters, lr=learning_rate)
-        #return adabound.AdaBound(parameters, lr=1e-3, final_lr=0.1)
+        # return adabound.AdaBound(parameters, lr=1e-3, final_lr=0.1)
 
     def fit(self, epochs=100, grouping=36):
 
@@ -208,9 +214,9 @@ class LogicNet:
                     r_model = self.rules[rule_axiom]
                     output = self.compute_quantified_rule(r_model, grouping)
 
-                    #output.backward()
-                    #optimizer.step()
-                    #optimizer.zero_grad()
+                    # output.backward()
+                    # optimizer.step()
+                    # optimizer.zero_grad()
                     to_be_optimized.append(output)
                     check_satisfiability.append(output.item())
                 else:
@@ -223,9 +229,9 @@ class LogicNet:
                     truth_values = self.compute_grounded_axiom(axiom)
                     mean_truth_value = torch.mean(truth_values)
                     to_be_optimized.append(mean_truth_value)
-                    #mean_truth_value.backward()
-                    #optimizer.step()
-                    #optimizer.zero_grad()
+                    # mean_truth_value.backward()
+                    # optimizer.step()
+                    # optimizer.zero_grad()
                     check_satisfiability.append(mean_truth_value.item())
 
             output = torch.mean(torch.stack(to_be_optimized))
@@ -284,10 +290,9 @@ class LogicNet:
                 val = model(current_input).cpu().detach().numpy()[0][0]
                 if parsed_formula[0] == "~":
                     if verbose:
-                        print(formula + ": " + str(1-val), end="\n")
-                    return 1-val
+                        print(formula + ": " + str(1 - val), end="\n")
+                    return 1 - val
                 else:
                     if verbose:
                         print(formula + ": " + str(val), end="\n")
                     return val
-
