@@ -10,6 +10,7 @@ import itertools
 from pymetheus.utils.functionalities import batching
 import random
 from pymetheus.logics import logics
+import adabound
 
 class LogicNet:
     def __init__(self, universal_aggregator=lambda x : torch.mean(x), differentiable_logic=logics.LukasiewiczLogic()): # ()
@@ -112,7 +113,7 @@ class LogicNet:
     def compute_grounded_axiom(self, axiom):
         model = self.networks[axiom]  # get the predicate network
 
-        training_examples = self.axioms[axiom]  # get the training samples related to the eaxiom
+        training_examples = self.axioms[axiom]  # get the training samples related to the axiom
         targets = []
         inputs = []
 
@@ -181,7 +182,7 @@ class LogicNet:
             except Exception as e:
                 print(e)
                 pass
-        return torch.optim.Adam(parameters, lr=learning_rate)
+        return torch.optim.SGD(parameters, lr=learning_rate)
         #return adabound.AdaBound(parameters, lr=1e-3, final_lr=0.1)
 
     def fit(self, epochs=100, grouping=36):
@@ -204,16 +205,20 @@ class LogicNet:
                 random.shuffle(self.variables[a])
 
             for rule_axiom in to_train:
+                to_be_optimized = []
+                optimizer.zero_grad()
                 if "forall" in rule_axiom:
                     r_model = self.rules[rule_axiom]
                     output = self.compute_quantified_rule(r_model, grouping)
 
-                    #output.backward()
-                    #optimizer.step()
-                    #optimizer.zero_grad()
                     to_be_optimized.append(output)
                     check_satisfiability.append(output.item())
+
+                    output = torch.mean(torch.stack(to_be_optimized))
+                    output.backward()
+                    optimizer.step()
                 else:
+
                     axiom = rule_axiom
                     training_examples = self.axioms[axiom]  # get the training samples related to the axiom
 
@@ -221,17 +226,23 @@ class LogicNet:
                         continue
 
                     truth_values = self.compute_grounded_axiom(axiom)
+
                     mean_truth_value = torch.mean(truth_values)
-                    to_be_optimized.append(mean_truth_value)
+                    to_be_optimized.extend(truth_values.squeeze())
+
+                    output = torch.mean(torch.stack(to_be_optimized))
+                    output.backward()
+                    optimizer.step()
+
                     #mean_truth_value.backward()
-                    #optimizer.step()
-                    #optimizer.zero_grad()
+
                     check_satisfiability.append(mean_truth_value.item())
 
-            output = torch.mean(torch.stack(to_be_optimized))
+            #output = torch.mean(torch.stack(to_be_optimized))
 
-            output.backward()
-            optimizer.step()
+            #output.backward()
+
+            #optimizer.step()
 
             with torch.no_grad():
                 current_sat = 1 - np.mean(check_satisfiability)
