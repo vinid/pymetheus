@@ -98,7 +98,11 @@ class Predicate(nn.Module):
         self.pos_emb = nn.Embedding(2, size)
 
         self.W = nn.Bilinear(size, size, k)
-        self.V = nn.Linear(size, k)
+
+        self.linear_one = nn.Linear(size, 100)
+        self.linear_two = nn.Linear(100, 50)
+        self.linear_three = nn.Linear(50, 1)
+
         self.u = nn.Linear(k, 1)
         self.ul = torch.randn(k, requires_grad=True, device=get_torch_device())
 
@@ -170,10 +174,10 @@ class Predicate(nn.Module):
     def forward(self, x):
         x = self.ingest(x)
 
-        first = self.W(x, x)
-        second = self.V(x)
-        output = torch.relu(first + second)
-        x = self.u(output)
+        x = self.linear_one(x)
+        x = torch.relu(x)
+        x = self.linear_two(x)
+        x = torch.relu(x)
+        x = self.linear_three(x)
 
-        # x = self.to_output(x)
         return torch.sigmoid(x)

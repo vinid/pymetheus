@@ -48,13 +48,13 @@ rule_4 = "forall ?a: ~country(?a,?a)"
 rule_5 = "forall ?a: ~capital(?a,?a)"
 
 
-ll.universal_rule(rule)
-ll.universal_rule(rule_2)
-ll.universal_rule(rule_3)
+#ll.universal_rule(rule)
+#ll.universal_rule(rule_2)
+#ll.universal_rule(rule_3)
 ll.universal_rule(rule_4)
 ll.universal_rule(rule_5)
 
-ll.fit(epochs=2000, grouping=99)
+ll.fit(epochs=5000, grouping=99)
 print()
 
 
