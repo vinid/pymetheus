@@ -214,10 +214,10 @@ class LogicNet:
                     r_model = self.rules[rule_axiom]
                     output = self.compute_quantified_rule(r_model, grouping)
 
-                    # output.backward()
-                    # optimizer.step()
-                    # optimizer.zero_grad()
-                    to_be_optimized.append(output)
+                    output.backward()
+                    optimizer.step()
+                    optimizer.zero_grad()
+                    #to_be_optimized.append(output)
                     check_satisfiability.append(output.item())
                 else:
                     axiom = rule_axiom
@@ -229,15 +229,15 @@ class LogicNet:
                     truth_values = self.compute_grounded_axiom(axiom)
                     mean_truth_value = torch.mean(truth_values)
                     to_be_optimized.append(mean_truth_value)
-                    # mean_truth_value.backward()
-                    # optimizer.step()
-                    # optimizer.zero_grad()
+                    mean_truth_value.backward()
+                    optimizer.step()
+                    optimizer.zero_grad()
                     check_satisfiability.append(mean_truth_value.item())
 
-            output = torch.mean(torch.stack(to_be_optimized))
+            #output = torch.mean(torch.stack(to_be_optimized))
 
-            output.backward()
-            optimizer.step()
+            #output.backward()
+            #optimizer.step()
 
             with torch.no_grad():
                 current_sat = 1 - np.mean(check_satisfiability)
