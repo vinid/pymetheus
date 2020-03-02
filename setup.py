@@ -45,7 +45,7 @@ setup(
     include_package_data=True,
     keywords='pymetheus',
     name='pymetheus',
-    packages=find_packages(include=['pymetheus']),
+    packages=find_packages(include=['pymetheus', 'pymetheus.*']),
     setup_requires=setup_requirements,
     test_suite='tests',
     tests_require=test_requirements,

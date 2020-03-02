@@ -1,5 +1,9 @@
 import collections
+from functools import lru_cache
 from itertools import chain, islice
+
+import torch
+
 
 def harmonic_mean(input):
     return input.pow(-1).mean().pow(-1)
@@ -9,8 +13,9 @@ class Node(object):
 
     def __init__(self, value, left=None, right=None):
         self.value = value  # The node value
-        self.left = left    # Left child
+        self.left = left  # Left child
         self.right = right  # Right child
+
 
 def get_networks_ids(node):
     """
@@ -38,9 +43,10 @@ def batching(n, iterable):
     iterable = iter(iterable)
     while True:
         try:
-            yield chain([next(iterable)], islice(iterable, n-1))
+            yield chain([next(iterable)], islice(iterable, n - 1))
         except StopIteration:
             return
+
 
 def flatten(l):
     for el in l:
@@ -49,11 +55,13 @@ def flatten(l):
         else:
             yield el
 
-def exploring(node, accum = ""):
+
+def exploring(node, accum=""):
     print(accum + str(node.value))
     accum = accum + "\t"
     for a in node.children:
         (exploring(a, accum))
+
 
 def get_all_networks(node):
     ids = []
@@ -65,13 +73,15 @@ def get_all_networks(node):
 
     return flatten(ids)
 
+
 class MultiNode(object):
 
     def __init__(self, value, children):
         self.value = value
         self.children = children
 
-def rule_to_tree_augmented(parsed_network, number = 0):
+
+def rule_to_tree_augmented(parsed_network, number=0):
     """
     Takes a parsed network and generates a tree structure
     :param parsed_network:
@@ -96,12 +106,13 @@ def rule_to_tree_augmented(parsed_network, number = 0):
         s_node = MultiNode(parsed_network[0], [])
 
         for child in parsed_network[1:][0]:
-            get_value = rule_to_tree_augmented(child, number=number+1)
+            get_value = rule_to_tree_augmented(child, number=number + 1)
             s_node.children.append(get_value)
         return s_node
 
     return MultiNode(parsed_network, [])
 
 
-
-
+@lru_cache(maxsize=None)
+def get_torch_device():
+    return torch.device('cuda' if torch.cuda.is_available() else 'cpu')
