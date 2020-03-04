@@ -12,7 +12,6 @@ class QuantifiedFormula(nn.Module):
 
     def __init__(self, parsed_rule, networks, variables, aggregation=lambda x: torch.mean(x)):
         """
-
         :param parsed_rule: the rule computed by the following network
         :param networks: the networks in LogicNet
         :param variables: the variables to be considered in the current network
@@ -50,7 +49,6 @@ class QuantifiedFormula(nn.Module):
             return 1 - self.compute(parsed.children[0], vars)
 
         if parsed.value in self.nns.keys():  # if the value is a function or a predicate we need to compute it
-
             accumulate = []
             for v in parsed.children:
                 accumulate.append(self.compute(v, vars))
@@ -176,4 +174,23 @@ class Predicate(nn.Module):
         x = self.u(output)
 
         # x = self.to_output(x)
+        return torch.sigmoid(x)
+
+
+class LinearPredicate(Predicate):
+    def __init__(self, size):
+        super().__init__(size)
+        self.linear_one = nn.Linear(size, 100)
+        self.linear_two = nn.Linear(100, 50)
+        self.linear_three = nn.Linear(50, 1)
+
+    def forward(self, x):
+        x = self.ingest(x)
+
+        x = self.linear_one(x)
+        x = torch.relu(x)
+        x = self.linear_two(x)
+        x = torch.relu(x)
+        x = self.linear_three(x)
+
         return torch.sigmoid(x)

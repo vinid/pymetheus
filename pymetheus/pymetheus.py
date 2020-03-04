@@ -5,7 +5,6 @@ import random
 
 import numpy as np
 import tqdm
-from torch.autograd import Variable
 
 from pymetheus.logics import LogicEnum, Logic
 from pymetheus.logics.fuzzy_logic import *
@@ -35,23 +34,27 @@ class LogicNet:
         if labelled:
             self.variables[label] = list(map(lambda x: self.constants[x], domain))
         else:
-            self.variables[label] = list(map(lambda x: torch.Tensor(x), domain))
+            self.variables[label] = list(map(lambda x: torch.tensor(x), domain))
 
-    def predicate(self, predicate, network=False, arity=2, argument_size=5, overwrite=False):
+    def predicate(self, predicate, network=None, arity=2, argument_size=5, overwrite=False):
         """
         Creates a Neural Network for a string symbol that identifies a predicate
         :param predicate:
-        :param size:
+        :param network:
+        :param arity:
+        :param argument_size:
+        :param overwrite:
         :return:
         """
-        if predicate in self.networks.keys() and overwrite == False:
+        if predicate in self.networks.keys() and overwrite is False:
             raise DobuleInitalizationException("Overwrite behaviour is off, error on double declaration of predicate.",
                                                predicate)
 
         if network:
             self.networks[predicate] = network
         else:
-            self.networks[predicate] = Predicate(argument_size * arity).to(self.device)
+            # self.networks[predicate] = Predicate(argument_size * arity).to(self.device)
+            self.networks[predicate] = LinearPredicate(argument_size * arity).to(self.device)
         self.axioms[predicate] = []  # initializes list of training samples
 
     def constant(self, name, definition=None, argument_size=5, optimize=False, overwrite=False):
@@ -64,17 +67,14 @@ class LogicNet:
         :param overwrite:
         :return:
         """
-        if name in self.constants and overwrite == False:
+        if name in self.constants and overwrite is False:
             raise DobuleInitalizationException("Overwrite behaviour is off, error on double declaration of constant.",
                                                name)
 
-        if type(definition) != type(None):
-            if optimize:
-                self.constants[name] = Variable(torch.Tensor(definition), requires_grad=True).to(self.device).float()
-            else:
-                self.constants[name] = torch.tensor(definition, device=self.device).float()
+        if definition is None:
+            self.constants[name] = torch.randn(argument_size, device=self.device, requires_grad=True).float()
         else:
-            self.constants[name] = torch.randn(argument_size, requires_grad=True, device=self.device).float()
+            self.constants[name] = torch.tensor(definition, device=self.device, requires_grad=optimize).float()
 
     def universal_rule(self, rule):
         """
@@ -131,7 +131,7 @@ class LogicNet:
 
             fuzzy_value_to_predict = training_example[1]
 
-            target = torch.from_numpy(np.array([fuzzy_value_to_predict])).type(torch.FloatTensor)
+            target = torch.from_numpy(np.array([fuzzy_value_to_predict])).type(torch.float)
             targets.append(target)
             inputs.append(local)
 
@@ -179,7 +179,7 @@ class LogicNet:
         parameters = set()
 
         for const in self.constants:
-            parameters |= set([self.constants[const]])
+            parameters |= {self.constants[const]}
 
         for network in self.networks:
             try:
@@ -190,11 +190,9 @@ class LogicNet:
         return torch.optim.Adam(parameters, lr=learning_rate)
         # return adabound.AdaBound(parameters, lr=1e-3, final_lr=0.1)
 
-    def fit(self, epochs=100, grouping=36):
+    def fit(self, epochs=100, grouping=36, learning_rate=.01):
 
-        learning_rate = 0.01
         optimizer = self.define_optimizer(learning_rate)
-
         pbar = tqdm.tqdm(total=epochs)
 
         for epoch in range(0, epochs):
@@ -214,10 +212,11 @@ class LogicNet:
                     r_model = self.rules[rule_axiom]
                     output = self.compute_quantified_rule(r_model, grouping)
 
-                    output.backward()
-                    optimizer.step()
-                    optimizer.zero_grad()
-                    #to_be_optimized.append(output)
+                    to_be_optimized.append(output)
+                    # output.backward()
+                    # optimizer.step()
+                    # optimizer.zero_grad()
+                    # to_be_optimized.append(output)
                     check_satisfiability.append(output.item())
                 else:
                     axiom = rule_axiom
@@ -228,26 +227,31 @@ class LogicNet:
 
                     truth_values = self.compute_grounded_axiom(axiom)
                     mean_truth_value = torch.mean(truth_values)
-                    to_be_optimized.append(mean_truth_value)
-                    mean_truth_value.backward()
-                    optimizer.step()
-                    optimizer.zero_grad()
+                    # to_be_optimized.append(mean_truth_value)
+                    squeezed = truth_values.squeeze()  # torch.mean(truth_values)
+
+                    # mean_truth_value.backward()
+                    # optimizer.step()
+                    # optimizer.zero_grad()
+                    to_be_optimized.extend(squeezed)
+
                     check_satisfiability.append(mean_truth_value.item())
 
-            #output = torch.mean(torch.stack(to_be_optimized))
+            output = torch.mean(torch.stack(to_be_optimized))
 
-            #output.backward()
-            #optimizer.step()
+            output.backward()
+            optimizer.step()
 
             with torch.no_grad():
                 current_sat = 1 - np.mean(check_satisfiability)
 
+            pbar.set_description("Current Satisfiability %f)" % current_sat)
+
+            pbar.update(1)
+
             if current_sat > 0.99:
                 break
 
-            pbar.set_description("Current Satisfiability %f)" % (current_sat))
-
-            pbar.update(1)
 
     def reason(self, formula, verbose=False, grouping=32):
         with torch.no_grad():
