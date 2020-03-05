@@ -1,50 +1,56 @@
-from pyparsing import (alphanums, alphas, delimitedList, Forward,
-                       Group, Keyword, Literal, opAssoc, operatorPrecedence,
-                       ParserElement, ParseException, ParseSyntaxException, Suppress,
-                       Word)
+from pyparsing import (alphanums, alphas, delimitedList, Forward, Group, Keyword, Literal, opAssoc, operatorPrecedence,
+                       Suppress, Word, dblQuotedString, removeQuotes)
 
 
 def _parse_formula(text):
     """
     >>> formula = "p(a,b)"
     >>> print(_parse_formula(formula))
-    ['p', (['a', 'b'], {})]
+    ['p', ['a', 'b']]
 
     >>> formula = "~p(a,b)"
     >>> print(_parse_formula(formula))
-    ['~','p', (['a', 'b'], {})]
+    ['~', ['p', ['a', 'b']]]
 
     >>> formula = "=(a,b)"
     >>> print(_parse_formula(formula))
-    ['=', (['a', 'b'], {})]
+    ['=', ['a', 'b']]
 
     >>> formula = "<(a,b)"
     >>> print(_parse_formula(formula))
-    ['<', (['a', 'b'], {})]
+    ['<', ['a', 'b']]
 
     >>> formula = "~p(a)"
     >>> print(_parse_formula(formula))
-    ['~', 'p', (['a'], {})]
+    ['~', ['p', ['a']]]
 
     >>> formula = "~p(a)|a(p)"
     >>> print(_parse_formula(formula))
-    [(['~', 'p', (['a'], {})], {}), '|', (['a', (['p'], {})], {})]
+    [['~', ['p', ['a']]], '|', ['a', ['p']]]
 
     >>> formula = "p(a) | p(b)"
     >>> print(_parse_formula(formula))
-    [(['p', (['a'], {})], {}), '|', (['p', (['b'], {})], {})]
+    [['p', ['a']], '|', ['p', ['b']]]
 
     >>> formula = "~p(a) | p(b)"
     >>> print(_parse_formula(formula))
-    [(['~', 'p', (['a'], {})], {}), '|', (['p', (['b'], {})], {})]
+    [['~', ['p', ['a']]], '|', ['p', ['b']]]
 
     >>> formula = "p(f(a)) | p(b)"
     >>> print(_parse_formula(formula))
-    [(['p', ([(['f', (['a'], {})], {})], {})], {}), '|', (['p', (['b'], {})], {})]
+    [['p', [['f', ['a']]]], '|', ['p', ['b']]]
 
     >>> formula = "p(a) | p(b) | p(c)"
     >>> print(_parse_formula(formula))
-    [(['p', ([(['f', (['a'], {})], {})], {})], {}), '|', (['p', (['b'], {})], {})]
+    [['p', ['a']], '|', ['p', ['b']], '|', ['p', ['c']]]
+
+    >>> formula = 'p("http://dbpedia.org/ontology/MeanOfTransportation_,_Instrument","1b")'
+    >>> print(_parse_formula(formula))
+    ['p', ['http://dbpedia.org/ontology/MeanOfTransportation_,_Instrument', '1b']]
+
+    >>> formula = '"http://dbpedia.org/ontology/range"("http://dbpedia.org/ontology/MeanOfTransportation_,_Instrument","1b")'
+    >>> print(_parse_formula(formula))
+    ['http://dbpedia.org/ontology/range', ['http://dbpedia.org/ontology/MeanOfTransportation_,_Instrument', '1b']]
 
     """
     left_parenthesis, right_parenthesis, colon = map(Suppress, "():")
@@ -56,13 +62,15 @@ def _parse_formula(text):
     not_ = Literal("~")
     equiv_ = Literal("%")
 
-    symbol = Word(alphas + "_" + "?" + ".", alphanums + "_" + "?" + "." + "-")
+    symbol = Word(alphas + "_" + "?" + ".", alphanums + "_" + "?" + "." + "-") | \
+        dblQuotedString.setParseAction(removeQuotes)
 
     term = Forward()
     term << (Group(symbol + Group(left_parenthesis +
                                   delimitedList(term) + right_parenthesis)) | symbol)
 
-    pred_symbol = Word(alphas + "_" + ".", alphanums + "_" + "." + "-") | Literal("=") | Literal("<")
+    pred_symbol = Word(alphas + "_" + ".", alphanums + "_" + "." + "-") | Literal("=") | Literal("<") | \
+        dblQuotedString.setParseAction(removeQuotes)
     literal = Forward()
     literal << (Group(pred_symbol + Group(left_parenthesis + delimitedList(term) + right_parenthesis)) |
                 Group(not_ + pred_symbol + Group(left_parenthesis + delimitedList(term) + right_parenthesis)))
