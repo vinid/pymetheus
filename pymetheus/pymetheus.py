@@ -53,8 +53,8 @@ class LogicNet:
         if network:
             self.networks[predicate] = network
         else:
-            # self.networks[predicate] = Predicate(argument_size * arity).to(self.device)
-            self.networks[predicate] = LinearPredicate(argument_size * arity).to(self.device)
+            self.networks[predicate] = Predicate(argument_size * arity).to(self.device)
+            # self.networks[predicate] = LinearPredicate(argument_size * arity).to(self.device)
         self.axioms[predicate] = []  # initializes list of training samples
 
     def constant(self, name, definition=None, argument_size=5, optimize=False, overwrite=False):
