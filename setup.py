@@ -14,13 +14,13 @@ with open('HISTORY.rst') as history_file:
 with open('requirements.txt') as f:
     requirements = f.read().splitlines()
 
-setup_requirements = ['pytest-runner', ]
+setup_requirements = [ ]
 
-test_requirements = ['pytest', ]
+test_requirements = [ ]
 
 setup(
     author="Federico Bianchi",
-    author_email='federico.bianchi@unimib.it',
+    author_email='f.bianchi@unibocconi.it',
     classifiers=[
         'Development Status :: 2 - Pre-Alpha',
         'Intended Audience :: Developers',
