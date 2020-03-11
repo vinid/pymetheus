@@ -100,6 +100,26 @@ class LogicNet:
         """
         self.networks[name] = Function(in_size, out_size)
 
+    def _add_true_axiom(self, predicate, constants):
+        """
+        Helper method to add a new axiom to the LogicNet
+        Useful for bulk initialization
+        :param predicate:
+        :param constants:
+        :return:
+        """
+        self.axioms[predicate].append((constants, 1))
+
+    def _add_false_axiom(self, predicate, constants):
+        """
+        Helper method to add a new negative axiom to the LogicNet
+        Useful for bulk initialization
+        :param predicate:
+        :param constants:
+        :return:
+        """
+        self.axioms[predicate].append((constants, 0))
+
     def knowledge(self, fact):
         """
         Adds a knowledge fact into the training set
@@ -109,11 +129,9 @@ class LogicNet:
         parsed_formula = parser._parse_formula(fact)
 
         if parsed_formula[0] == "~":  # negative axiom
-            predicate = parsed_formula[1][0]
-            self.axioms[predicate].append((parsed_formula[1][1], 0))
+            self._add_false_axiom(parsed_formula[1][0], parsed_formula[1][1])
         else:
-            predicate = parsed_formula[0]
-            self.axioms[predicate].append((parsed_formula[1], 1))
+            self._add_true_axiom(parsed_formula[0], parsed_formula[1])
 
     def compute_grounded_axiom(self, axiom):
         model = self.networks[axiom]  # get the predicate network
@@ -233,7 +251,10 @@ class LogicNet:
                     # mean_truth_value.backward()
                     # optimizer.step()
                     # optimizer.zero_grad()
-                    to_be_optimized.extend(squeezed)
+                    if squeezed.dim() > 0:
+                        to_be_optimized.extend(squeezed)
+                    else:
+                        to_be_optimized.append(squeezed)
 
                     check_satisfiability.append(mean_truth_value.item())
 
@@ -251,7 +272,6 @@ class LogicNet:
 
             if current_sat > 0.99:
                 break
-
 
     def reason(self, formula, verbose=False, grouping=32):
         with torch.no_grad():
