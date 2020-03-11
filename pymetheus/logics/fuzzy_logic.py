@@ -1,9 +1,7 @@
-import torch
-from torch import nn
-from pymetheus.utils.functionalities import *
 import torch.nn.functional as F
+from torch import nn
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+from pymetheus.utils.functionalities import *
 
 
 class QuantifiedFormula(nn.Module):
@@ -11,9 +9,9 @@ class QuantifiedFormula(nn.Module):
     Implements a quantified formula that supports the grouping of the variables to avoid generating inputs that are
     too big to handle
     """
+
     def __init__(self, parsed_rule, networks, variables, aggregation=lambda x: torch.mean(x)):
         """
-
         :param parsed_rule: the rule computed by the following network
         :param networks: the networks in LogicNet
         :param variables: the variables to be considered in the current network
@@ -51,7 +49,6 @@ class QuantifiedFormula(nn.Module):
             return 1 - self.compute(parsed.children[0], vars)
 
         if parsed.value in self.nns.keys():  # if the value is a function or a predicate we need to compute it
-
             accumulate = []
             for v in parsed.children:
                 accumulate.append(self.compute(v, vars))
@@ -101,13 +98,13 @@ class Predicate(nn.Module):
         self.W = nn.Bilinear(size, size, k)
         self.V = nn.Linear(size, k)
         self.u = nn.Linear(k, 1)
-        self.ul = torch.randn(k, requires_grad=True, device=device)
+        self.ul = torch.randn(k, requires_grad=True, device=get_torch_device())
 
         self.to_output = nn.Linear(size, 1)
 
         self.tokeys = nn.Linear(size, size, bias=False)
-        self.toqueries = nn.Linear(size, size , bias=False)
-        self.tovalues = nn.Linear(size, size , bias=False)
+        self.toqueries = nn.Linear(size, size, bias=False)
+        self.tovalues = nn.Linear(size, size, bias=False)
 
     def self_attention(self, ingestion):
         get_lists_of_arguments = list(map(torch.stack, zip(*ingestion)))
@@ -115,19 +112,19 @@ class Predicate(nn.Module):
 
         (b, t, k) = data.size()
 
-        positions = torch.arange(t, device=device)
+        positions = torch.arange(t, device=get_torch_device())
         positions = self.pos_emb(positions)[None, :, :].expand((b, t, k))
 
         data = positions + data
         queries = self.toqueries(data).view(b, t, k)
-        keys = self.tokeys(data)   .view(b, t, k)
-        values = self.tovalues(data)   .view(b, t, k)
+        keys = self.tokeys(data).view(b, t, k)
+        values = self.tovalues(data).view(b, t, k)
 
-        keys = keys.transpose(1, 2).contiguous().view(b , t, k)
+        keys = keys.transpose(1, 2).contiguous().view(b, t, k)
         queries = queries.transpose(1, 2).contiguous().view(b, t, k)
 
-        #queries = queries / (k ** (1/4))
-        #keys = keys / (k ** (1/4))
+        # queries = queries / (k ** (1/4))
+        # keys = keys / (k ** (1/4))
 
         dot = torch.bmm(queries, keys.transpose(1, 2))
 
@@ -143,7 +140,7 @@ class Predicate(nn.Module):
 
         (b, t, k) = data.size()
 
-        positions = torch.arange(t, device=device)
+        positions = torch.arange(t, device=get_torch_device())
         positions = self.pos_emb(positions)[None, :, :].expand((b, t, k))
 
         data = positions + data
@@ -153,8 +150,8 @@ class Predicate(nn.Module):
         weights = F.softmax(raw_weights, dim=2)
 
         y = torch.bmm(weights, data)
+        # v = y.reshape(b, t*k)
 
-        #v = y.reshape(b, t*k)
         y = y.mean(dim=1)
 
         return y
@@ -173,12 +170,27 @@ class Predicate(nn.Module):
 
         first = self.W(x, x)
         second = self.V(x)
-        output = torch.relu(first+second)
+        output = torch.relu(first + second)
         x = self.u(output)
 
-        #x = self.to_output(x)
+        # x = self.to_output(x)
         return torch.sigmoid(x)
 
 
+class LinearPredicate(Predicate):
+    def __init__(self, size):
+        super().__init__(size)
+        self.linear_one = nn.Linear(size, 100)
+        self.linear_two = nn.Linear(100, 50)
+        self.linear_three = nn.Linear(50, 1)
 
+    def forward(self, x):
+        x = self.ingest(x)
 
+        x = self.linear_one(x)
+        x = torch.relu(x)
+        x = self.linear_two(x)
+        x = torch.relu(x)
+        x = self.linear_three(x)
+
+        return torch.sigmoid(x)

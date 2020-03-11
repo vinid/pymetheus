@@ -1,28 +1,30 @@
 # -*- coding: utf-8 -*-
 """Main module."""
-from pymetheus.utils.exceptions import DobuleInitalizationException
-import tqdm
+import itertools
+import random
+
 import numpy as np
-from torch.autograd import Variable
+import tqdm
+
+from pymetheus.logics import LogicEnum, Logic
 from pymetheus.logics.fuzzy_logic import *
 from pymetheus.parser import rule_parser as parser
-import itertools
+from pymetheus.utils.exceptions import DobuleInitalizationException
 from pymetheus.utils.functionalities import batching
-import random
-from pymetheus.logics import logics
-
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 class LogicNet:
-    def __init__(self, universal_aggregator=lambda x : torch.mean(x), differentiable_logic=logics.LukasiewiczLogic()): # ()
+    def __init__(self, universal_aggregator=lambda x: torch.mean(x),
+                 differentiable_logic: Logic = LogicEnum.default().value):
+
+        self.device = get_torch_device()
 
         self.constants = {}
         self.networks = {"->": differentiable_logic.residual,
-                         "&": differentiable_logic.tnorm,
+                         "&": differentiable_logic.t_norm,
                          "~": differentiable_logic.negation,
-                         "|": differentiable_logic.tconrom,
-                         "%": differentiable_logic.equality}
+                         "|": differentiable_logic.t_conorm,
+                         "%": differentiable_logic.equal}
         self.rules = {}
         self.axioms = {}
         self.variables = {}
@@ -30,46 +32,49 @@ class LogicNet:
 
     def variable(self, label, domain, labelled=True):
         if labelled:
-            self.variables[label] = list(map(lambda x : self.constants[x], domain))
+            self.variables[label] = list(map(lambda x: self.constants[x], domain))
         else:
-            self.variables[label] = list(map(lambda x : torch.Tensor(x), domain))
+            self.variables[label] = list(map(lambda x: torch.tensor(x), domain))
 
-    def predicate(self, predicate, network=False, arity=2, argument_size=5, overwrite = False):
+    def predicate(self, predicate, network=None, arity=2, argument_size=5, overwrite=False):
         """
         Creates a Neural Network for a string symbol that identifies a predicate
         :param predicate:
-        :param size:
+        :param network:
+        :param arity:
+        :param argument_size:
+        :param overwrite:
         :return:
         """
-
-        if predicate in self.networks.keys() and overwrite == False:
-            raise DobuleInitalizationException("Overwrite behaviour is off, error on double declaration of predicate.", predicate)
+        if predicate in self.networks.keys() and overwrite is False:
+            raise DobuleInitalizationException("Overwrite behaviour is off, error on double declaration of predicate.",
+                                               predicate)
 
         if network:
             self.networks[predicate] = network
         else:
-            self.networks[predicate] = Predicate(argument_size*arity).to(device)
-        self.axioms[predicate] = [] # initializes list of training samples
+            self.networks[predicate] = Predicate(argument_size * arity).to(self.device)
+            # self.networks[predicate] = LinearPredicate(argument_size * arity).to(self.device)
+        self.axioms[predicate] = []  # initializes list of training samples
 
-    def constant(self, name, definition=None, argument_size=5,  optimize=False, overwrite=False):
+    def constant(self, name, definition=None, argument_size=5, optimize=False, overwrite=False):
         """
         Creates a (logical) constant in the model. The representation for the constant can be given or learned
-        :param name:
-        :param definition:
-        :param size:
+        :param name: name of the constant
+        :param definition: numpy definition of the variable
+        :param argument_size: size of the constant
+        :param optimize:
         :param overwrite:
         :return:
         """
-        if name in self.constants and overwrite == False:
-            raise DobuleInitalizationException("Overwrite behaviour is off, error on double declaration of constant.", name)
+        if name in self.constants and overwrite is False:
+            raise DobuleInitalizationException("Overwrite behaviour is off, error on double declaration of constant.",
+                                               name)
 
-        if type(definition) != type(None):
-            if optimize:
-                self.constants[name] = Variable(torch.Tensor(definition), requires_grad=True).to(device).float()
-            else:
-                self.constants[name] = torch.tensor(definition, device=device).float()
+        if definition is None:
+            self.constants[name] = torch.randn(argument_size, device=self.device, requires_grad=True).float()
         else:
-            self.constants[name] = torch.randn(argument_size, requires_grad=True, device=device).float()
+            self.constants[name] = torch.tensor(definition, device=self.device, requires_grad=optimize).float()
 
     def universal_rule(self, rule):
         """
@@ -86,6 +91,13 @@ class LogicNet:
         self.rules[rule] = net
 
     def function(self, name, in_size, out_size):
+        """
+        Defines a function R^n -> R^m
+        :param name:
+        :param in_size:
+        :param out_size:
+        :return:
+        """
         self.networks[name] = Function(in_size, out_size)
 
     def knowledge(self, fact):
@@ -119,14 +131,14 @@ class LogicNet:
 
             fuzzy_value_to_predict = training_example[1]
 
-            target = torch.from_numpy(np.array([fuzzy_value_to_predict])).type(torch.FloatTensor)
+            target = torch.from_numpy(np.array([fuzzy_value_to_predict])).type(torch.float)
             targets.append(target)
             inputs.append(local)
 
         targets = list(targets)
         inputs = list(inputs)
 
-        targets = torch.stack(targets).to(device)
+        targets = torch.stack(targets).to(self.device)
         send = list(zip(*inputs))
         send = map(list, send)
 
@@ -141,7 +153,7 @@ class LogicNet:
         for k in r_model.vars:
             temp[k] = self.variables[k]
 
-        #temp = {k: v for k, v in filter(lambda t: t[0] in r_model.vars, self.variables.items())}
+        # temp = {k: v for k, v in filter(lambda t: t[0] in r_model.vars, self.variables.items())}
 
         # {?a : v_Rome, v_Paris, ?b : v_Italy, v_France}
         # forall ?a,?b K(?a,?b) -> P(?b,?a)
@@ -167,7 +179,7 @@ class LogicNet:
         parameters = set()
 
         for const in self.constants:
-            parameters |= set([self.constants[const]])
+            parameters |= {self.constants[const]}
 
         for network in self.networks:
             try:
@@ -176,13 +188,11 @@ class LogicNet:
                 print(e)
                 pass
         return torch.optim.Adam(parameters, lr=learning_rate)
-        #return adabound.AdaBound(parameters, lr=1e-3, final_lr=0.1)
+        # return adabound.AdaBound(parameters, lr=1e-3, final_lr=0.1)
 
-    def fit(self, epochs=100, grouping=36):
+    def fit(self, epochs=100, grouping=36, learning_rate=.01):
 
-        learning_rate = 0.01
         optimizer = self.define_optimizer(learning_rate)
-
         pbar = tqdm.tqdm(total=epochs)
 
         for epoch in range(0, epochs):
@@ -202,10 +212,11 @@ class LogicNet:
                     r_model = self.rules[rule_axiom]
                     output = self.compute_quantified_rule(r_model, grouping)
 
-                    #output.backward()
-                    #optimizer.step()
-                    #optimizer.zero_grad()
                     to_be_optimized.append(output)
+                    # output.backward()
+                    # optimizer.step()
+                    # optimizer.zero_grad()
+                    # to_be_optimized.append(output)
                     check_satisfiability.append(output.item())
                 else:
                     axiom = rule_axiom
@@ -216,10 +227,14 @@ class LogicNet:
 
                     truth_values = self.compute_grounded_axiom(axiom)
                     mean_truth_value = torch.mean(truth_values)
-                    to_be_optimized.append(mean_truth_value)
-                    #mean_truth_value.backward()
-                    #optimizer.step()
-                    #optimizer.zero_grad()
+                    # to_be_optimized.append(mean_truth_value)
+                    squeezed = truth_values.squeeze()  # torch.mean(truth_values)
+
+                    # mean_truth_value.backward()
+                    # optimizer.step()
+                    # optimizer.zero_grad()
+                    to_be_optimized.extend(squeezed)
+
                     check_satisfiability.append(mean_truth_value.item())
 
             output = torch.mean(torch.stack(to_be_optimized))
@@ -230,12 +245,12 @@ class LogicNet:
             with torch.no_grad():
                 current_sat = 1 - np.mean(check_satisfiability)
 
-            if current_sat > 0.99:
-                break
-
-            pbar.set_description("Current Satisfiability %f)" % (current_sat))
+            pbar.set_description("Current Satisfiability %f)" % current_sat)
 
             pbar.update(1)
+
+            if current_sat > 0.99:
+                break
 
 
     def reason(self, formula, verbose=False, grouping=32):
@@ -274,15 +289,14 @@ class LogicNet:
 
                 current_input = []
                 for element in data:
-                    current_input.append(self.constants[element].to(device).reshape(1, -1))
+                    current_input.append(self.constants[element].to(self.device).reshape(1, -1))
 
                 val = model(current_input).cpu().detach().numpy()[0][0]
                 if parsed_formula[0] == "~":
                     if verbose:
-                        print(formula + ": " + str(1-val), end="\n")
-                    return 1-val
+                        print(formula + ": " + str(1 - val), end="\n")
+                    return 1 - val
                 else:
                     if verbose:
                         print(formula + ": " + str(val), end="\n")
                     return val
-
