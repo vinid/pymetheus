@@ -1,0 +1,1 @@
+AnnotationPropertyDomain(<http://dbpedia.org/ontology/signName> <http://dbpedia.org/ontology/HungarySettlement>)

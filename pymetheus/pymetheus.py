@@ -212,7 +212,7 @@ class LogicNet:
                     r_model = self.rules[rule_axiom]
                     output = self.compute_quantified_rule(r_model, grouping)
 
-                    to_be_optimized.append(output)
+                    to_be_optimized.extend(output)
                     # output.backward()
                     # optimizer.step()
                     # optimizer.zero_grad()
@@ -233,6 +233,7 @@ class LogicNet:
                     # mean_truth_value.backward()
                     # optimizer.step()
                     # optimizer.zero_grad()
+                    print(squeezed, to_be_optimized)
                     to_be_optimized.extend(squeezed)
 
                     check_satisfiability.append(mean_truth_value.item())
