@@ -43,6 +43,7 @@ setup(
     install_requires=requirements,
     license="GNU General Public License v3",
     long_description=readme + '\n\n' + history,
+    long_description_content_type='text/markdown',
     include_package_data=True,
     keywords='pymetheus',
     name='pymetheus',
@@ -51,6 +52,6 @@ setup(
     test_suite='tests',
     tests_require=test_requirements,
     url='https://github.com/vinid/pymetheus',
-    version='0.3.0',
+    version='0.3.1',
     zip_safe=False,
 )
