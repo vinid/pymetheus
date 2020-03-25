@@ -36,8 +36,6 @@ Features
 
 .. code-block:: python
 
-    import pymetheus
-    import itertools
     from pymetheus.pymetheus import LogicNet
 
     ll = LogicNet()
@@ -47,43 +45,60 @@ Features
 
 .. code-block:: python
 
-    ll.constant("Rome")
-    ll.constant("Milan")
-    ll.constant("Italy")
+    ll.constant("A")
+    ll.constant("B")
+    ll.constant("C")
+    ll.constant("D")
+    ll.constant("E")
 ..
 
 * Introduce Some Predicates and Knowledge
 
 .. code-block:: python
 
-    ll.predicate("capital")
-    ll.predicate("country")
+    ll.predicate("over")
+    ll.predicate("under")
 
-    ll.knowledge("country(Milan,Italy)")
-    ll.knowledge("capital(Rome,Italy)")
-
-    ll.zeroing() # Initialize KB with all knowledge as false
+    ll.knowledge("over(A,B)")
+    ll.knowledge("over(B,C)")
+    ll.knowledge("over(C,D)")
 ..
 
 
 * Add quantified rule with data
 .. code-block:: python
 
-    rule = "forall ?a,?b: capital(?a,?b) -> country(?a,?b)"
+    variables = ["A", "B", "C", "D", "E"]
+    ll.variable("?a", variables)
+    ll.variable("?b", variables)
+    ll.variable("?c", variables)
+
+    rule = "forall ?a,?b: over(?a,?b) -> under(?b,?a)"
+    rule_2 = "forall ?a,?b: under(?a,?b) -> over(?b,?a)"
+
+    rule_3 = "forall ?a,?b,?c: (over(?a,?b) & over(?b,?c)) -> over(?a,?c)"
+
+    rule_4 = "forall ?a,?b,?c: (under(?a,?b) & under(?b,?c)) -> under(?a,?c)"
+
+    rule_5 = "forall ?a,?b: over(?a,?b) -> ~over(?b,?a)"
+    rule_6 = "forall ?a,?b: under(?a,?b) -> ~under(?b,?a)"
+
     ll.universal_rule(rule)
-    var = ["Italy", "Rome", "Milan"]
-    ll.variable("?a", var)
-    ll.variable("?b", var)
+    ll.universal_rule(rule_2)
+    ll.universal_rule(rule_3)
+    ll.universal_rule(rule_4)
+    ll.universal_rule(rule_6)
 ..
 
 * Learn and Reason
 
 .. code-block:: python
 
-    ll.learn(epochs=1000, batch_size=25)
+    ll.fit(epochs=2000, grouping=99)
 
 
-    ll.reason("capital(Rome,Italy)", True)
+    ll.reason("over(A,D)", True)
+    ll.reason("over(D,A)", True)
 ..
 
 Credits
